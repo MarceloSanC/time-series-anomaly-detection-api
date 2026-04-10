@@ -10,6 +10,8 @@ class Settings(BaseSettings):
 
     app_name: str = Field(default="Time Series Anomaly Detection API")
     app_env: str = Field(default="development")
+    app_host: str = Field(default="0.0.0.0")
+    app_port: int = Field(default=8000)
     log_level: str = Field(default="INFO")
 
     storage_path: Path = Field(default=Path("storage"))
@@ -17,7 +19,7 @@ class Settings(BaseSettings):
     min_data_points: int = Field(default=30)
     std_threshold: float = Field(default=1e-10)
 
-    latency_window_size: int = Field(default=1000)
+    latency_window_size: int = Field(default=1000, validation_alias="MAX_LATENCY_SAMPLES")
 
 
 @lru_cache

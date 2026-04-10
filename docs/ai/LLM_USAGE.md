@@ -8,7 +8,7 @@ Read before every coding session.
 ## ROLE SPLIT
 
 ### Use Claude Sonnet 4.6 for:
-- Reviewing generated code against `skills.md` and `ARCHITECTURE.md`
+- Reviewing generated code against `docs/ai/skills.md` and `docs/project/ARCHITECTURE.md`
 - Discussing architectural trade-offs when two approaches seem valid
 - Generating test cases, especially edge cases and negative cases for `ValidationService`
 - Writing documentation: README sections, docstrings, error messages
@@ -28,7 +28,7 @@ Read before every coding session.
 
 At the start of every session with either model:
 
-1. Paste `skills.md` in full as the first message (system context)
+1. Paste `docs/ai/skills.md` in full as the first message (system context)
 2. State which day of the roadmap you are on
 3. State which layer you are working in (domain / services / repository / api / utils / tests)
 4. State which files already exist and are complete
@@ -36,7 +36,7 @@ At the start of every session with either model:
 
 Example session opener:
 ```
-[Paste skills.md here]
+[Paste docs/ai/skills.md here]
 
 ---
 
@@ -59,7 +59,7 @@ Context:
 After GPT-codex generates any file, ask Claude to review it with this prompt:
 
 ```
-Review this generated code against skills.md. Check for:
+Review this generated code against docs/ai/skills.md. Check for:
 1. Type hints on all function signatures
 2. Correct layer boundaries (no violations)
 3. Error handling completeness
@@ -67,7 +67,7 @@ Review this generated code against skills.md. Check for:
 5. No hardcoded values that should be in config
 6. Correct Pydantic v2 usage
 7. Thread safety for any shared state
-8. Any pattern that violates skills.md
+8. Any pattern that violates docs/ai/skills.md
 
 [Paste generated code here]
 ```
@@ -79,7 +79,7 @@ Review this generated code against skills.md. Check for:
 For any service or function:
 
 ```
-Generate pytest tests for this function following skills.md testing rules:
+Generate pytest tests for this function following docs/ai/skills.md testing rules:
 - Unit tests: no filesystem, no HTTP, mock repository
 - At least 1 happy path
 - At least 1 error path per possible exception

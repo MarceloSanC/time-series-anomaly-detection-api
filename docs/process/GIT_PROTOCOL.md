@@ -24,7 +24,7 @@ Para cada feature:
 
 Formato obrigatório:
 
-`<tipo>/<dia>-<escopo-curto>`
+`<tipo>/<area>-<objetivo>`
 
 Tipos permitidos:
 
@@ -37,11 +37,17 @@ Tipos permitidos:
 
 Exemplos:
 
-- `feature/day1-domain-schemas`
-- `feature/day1-model-repository`
-- `feature/day1-model-service`
-- `fix/day2-train-endpoint-error-handling`
-- `docs/day5-readme-final`
+- `feature/config-settings`
+- `feature/domain-schemas`
+- `feature/repository-versioning`
+- `fix/api-train-error-handling`
+- `docs/readme-final`
+
+Diretrizes de elegância:
+
+- Nomes curtos e sem data no branch.
+- Use termos de dominio do projeto (`config`, `domain`, `repository`, `services`, `api`, `tests`).
+- Foque no resultado da feature, nao na etapa cronologica.
 
 ## 4. Padrão de Mensagens de Commit
 
@@ -60,7 +66,7 @@ Exemplos:
 - `feat(service): add model training and version resolution`
 - `fix(service): handle missing version with explicit exception`
 - `test(repository): add save-load roundtrip coverage`
-- `docs(roadmap): document day 1 merge sequence`
+- `docs(protocol): refine merge workflow`
 
 Boas práticas:
 
@@ -82,19 +88,19 @@ git checkout main
 git merge --no-ff <branch-feature>
 ```
 
-## 6. Sequência Recomendada para Day 1
+## 6. Sequência Recomendada de Branches
 
 Após scaffolding inicial na `main`, seguir branches por feature na ordem do roadmap:
 
-1. `feature/day1-config`
-2. `feature/day1-domain`
-3. `feature/day1-repository`
-4. `feature/day1-services`
-5. `feature/day1-unit-tests`
+1. `feature/config`
+2. `feature/domain`
+3. `feature/repository`
+4. `feature/services`
+5. `feature/unit-tests`
 
 ## 7. Checklist Antes do Merge
 
-- Feature funcional conforme `skills.md` e `ROADMAP.md`
+- Feature funcional conforme `docs/ai/skills.md` e `docs/project/ROADMAP.md`
 - Sem violação de camadas (`domain`, `services`, `repository`, `api`)
 - Tipagem aplicada nas assinaturas públicas
 - Testes relevantes passando
@@ -104,4 +110,3 @@ Após scaffolding inicial na `main`, seguir branches por feature na ordem do roa
 
 - Releases estáveis: `vMAJOR.MINOR.PATCH`
 - Exemplo inicial de entrega final: `v1.0.0`
-

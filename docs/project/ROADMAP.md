@@ -2,7 +2,7 @@
 
 ## RULE ZERO
 
-**No enhancement work begins before the MVP checklist in `skills.md` is 100% complete.**
+**No enhancement work begins before the MVP checklist in `docs/ai/skills.md` is 100% complete.**
 This is non-negotiable. Do not rationalize exceptions.
 
 ---
@@ -20,7 +20,7 @@ This is non-negotiable. Do not rationalize exceptions.
    - `app/config.py` reading from `.env` via `pydantic-settings`
 
 2. Domain layer
-   - `app/domain/schemas.py` — all Pydantic models as defined in `skills.md`
+   - `app/domain/schemas.py` — all Pydantic models as defined in `docs/ai/skills.md`
    - `app/domain/models.py` — `AnomalyDetectionModel` with the iteration bug fixed silently
 
 3. Repository layer
@@ -106,7 +106,7 @@ pytest tests/ -v
 ### Tasks (in order)
 
 1. Validation service
-   - `app/services/validation_service.py` — implement all 5 rules from `skills.md`
+   - `app/services/validation_service.py` — implement all 5 rules from `docs/ai/skills.md`
    - Wire into `model_service.train()` — validation runs before lock acquisition
 
 2. Domain exceptions

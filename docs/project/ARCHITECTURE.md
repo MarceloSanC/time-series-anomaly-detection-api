@@ -112,7 +112,7 @@ def write_index_atomically(index_path: Path, data: dict) -> None:
 }
 ```
 
-**Status code mapping:** Defined in `skills.md`. Do not invent new status codes.
+**Status code mapping:** Defined in `docs/ai/skills.md`. Do not invent new status codes.
 
 ---
 
