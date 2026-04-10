@@ -1,0 +1,24 @@
+PYTHON ?= python3
+PIP ?= $(PYTHON) -m pip
+PYTEST ?= $(PYTHON) -m pytest
+UVICORN ?= $(PYTHON) -m uvicorn
+
+.PHONY: install test run lint docker-build docker-up
+
+install:
+	$(PIP) install -e ".[dev]"
+
+test:
+	$(PYTEST) -v
+
+run:
+	$(UVICORN) app.main:app --host 0.0.0.0 --port 8000 --reload
+
+lint:
+	$(PYTHON) -m compileall app tests
+
+docker-build:
+	docker compose build
+
+docker-up:
+	docker compose up -d
