@@ -14,4 +14,6 @@ class AnomalyDetectionModel:
         return self
 
     def predict(self, data_point: DataPoint) -> bool:
+        if not hasattr(self, "mean") or not hasattr(self, "std"):
+            raise RuntimeError("Model must be fitted before calling predict()")
         return data_point.value > self.mean + 3 * self.std
