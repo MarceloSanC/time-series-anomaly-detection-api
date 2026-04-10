@@ -94,7 +94,7 @@ Após scaffolding inicial na `main`, seguir branches por feature na ordem do roa
 
 ## 7. Checklist Antes do Merge
 
-- Feature funcional conforme `skills.md` e `ROADMAP.md`
+- Feature funcional conforme `docs/ai/skills.md` e `docs/project/ROADMAP.md`
 - Sem violação de camadas (`domain`, `services`, `repository`, `api`)
 - Tipagem aplicada nas assinaturas públicas
 - Testes relevantes passando

@@ -108,7 +108,7 @@ anomaly-detection-api/
 ├── pyproject.toml
 ├── Makefile
 ├── .env.example
-├── skills.md                     # This file
+├── docs/ai/skills.md             # This file
 └── README.md
 ```
 
