@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from datetime import UTC, datetime
+import logging
 from time import perf_counter
 from typing import Any, Protocol
 
 from app.domain.models import AnomalyDetectionModel
 from app.domain.schemas import DataPoint, ModelInfo, PredictionResponse, TimeSeries, TrainResponse
 from app.repository.model_repository import ModelRepository
+
+logger = logging.getLogger(__name__)
 
 
 class SupportsSeriesLock(Protocol):
@@ -29,10 +32,12 @@ class ModelService:
         self.lock_manager = lock_manager
 
     def train(self, series_id: str, data: TimeSeries) -> TrainResponse:
-        start = perf_counter()
         lock_ctx = self.lock_manager.get_lock(series_id) if self.lock_manager is not None else nullcontext()
+        logger.info("Training started", extra={"series_id": series_id})
 
         with lock_ctx:
+            # Measure effective training time only (exclude lock wait time).
+            start = perf_counter()
             version = self._next_version(series_id)
             model = AnomalyDetectionModel().fit(data)
 
@@ -54,6 +59,7 @@ class ModelService:
                 },
             }
             self.repository.save(series_id=series_id, version=version, model=model, metadata=metadata)
+            logger.info("Training completed", extra={"series_id": series_id, "version": version})
 
             return TrainResponse(
                 series_id=series_id,
@@ -70,6 +76,14 @@ class ModelService:
         model, _metadata = self.repository.load(series_id=series_id, version=resolved_version)
 
         is_anomaly = bool(model.predict(data_point))
+        logger.info(
+            "Prediction completed",
+            extra={
+                "series_id": series_id,
+                "version": resolved_version,
+                "is_anomaly": is_anomaly,
+            },
+        )
         return PredictionResponse(
             series_id=series_id,
             version=resolved_version,
@@ -120,6 +134,7 @@ class ModelService:
             return str(index["latest_version"])
 
         if not self.repository.version_exists(series_id=series_id, version=version):
+            logger.warning("Version not found", extra={"series_id": series_id, "version": version})
             raise VersionNotFoundError(f"Version '{version}' not found for series '{series_id}'")
 
         return version

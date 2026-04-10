@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
 
 import joblib
+
+logger = logging.getLogger(__name__)
 
 
 class ModelRepository:
@@ -12,6 +15,7 @@ class ModelRepository:
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
     def save(self, series_id: str, version: str, model: Any, metadata: dict[str, Any]) -> None:
+        self._validate_series_id(series_id)
         series_path = self.storage_path / series_id
         version_path = series_path / version
         version_path.mkdir(parents=True, exist_ok=True)
@@ -37,20 +41,25 @@ class ModelRepository:
             "versions": versions,
         }
         self._write_index_atomically(index_path=index_path, payload=new_index)
+        logger.info("Model saved", extra={"series_id": series_id, "version": version})
 
     def load(self, series_id: str, version: str) -> tuple[Any, dict[str, Any]]:
+        self._validate_series_id(series_id)
         version_path = self.storage_path / series_id / version
         model_path = version_path / "model.joblib"
         metadata_path = version_path / "metadata.json"
 
         if not model_path.exists() or not metadata_path.exists():
+            logger.warning("Model not found", extra={"series_id": series_id, "version": version})
             raise FileNotFoundError(f"Model or metadata not found for series_id='{series_id}' version='{version}'")
 
         model = joblib.load(model_path)
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        logger.info("Model loaded", extra={"series_id": series_id, "version": version})
         return model, metadata
 
     def get_index(self, series_id: str) -> dict[str, Any] | None:
+        self._validate_series_id(series_id)
         index_path = self.storage_path / series_id / "index.json"
         if not index_path.exists():
             return None
@@ -70,6 +79,7 @@ class ModelRepository:
         return indexes
 
     def version_exists(self, series_id: str, version: str) -> bool:
+        self._validate_series_id(series_id)
         version_path = self.storage_path / series_id / version
         return version_path.exists() and version_path.is_dir()
 
@@ -77,3 +87,9 @@ class ModelRepository:
         tmp_path = index_path.with_suffix(index_path.suffix + ".tmp")
         tmp_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
         os.replace(tmp_path, index_path)
+
+    @staticmethod
+    def _validate_series_id(series_id: str) -> None:
+        invalid_tokens = ("/", "\\", "..", "\x00")
+        if not series_id or any(token in series_id for token in invalid_tokens):
+            raise ValueError(f"Invalid series_id: '{series_id}'")
