@@ -9,8 +9,24 @@ from fastapi.responses import JSONResponse
 
 # TODO(stage3): import domain exceptions from app/domain/exceptions.py after migration.
 from app.services.model_service import SeriesNotFoundError, VersionNotFoundError
+from app.services.validation_service import (
+    ConstantSeriesError,
+    DuplicateTimestampsError,
+    InsufficientDataError,
+    InvalidValuesError,
+    UnorderedTimestampsError,
+    ValidationServiceError,
+)
 
 logger = logging.getLogger(__name__)
+
+VALIDATION_ERROR_CODE_MAP: dict[type[ValidationServiceError], str] = {
+    InsufficientDataError: "INSUFFICIENT_DATA",
+    ConstantSeriesError: "CONSTANT_SERIES",
+    DuplicateTimestampsError: "DUPLICATE_TIMESTAMPS",
+    UnorderedTimestampsError: "UNORDERED_TIMESTAMPS",
+    InvalidValuesError: "INVALID_VALUES",
+}
 
 
 def _error_payload(error: str, message: str, detail: str | None = None) -> dict[str, str | None]:
@@ -41,6 +57,16 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=404,
             content=_error_payload(error="VERSION_NOT_FOUND", message=str(exc)),
+        )
+
+    @app.exception_handler(ValidationServiceError)
+    async def handle_validation_service_error(_: Request, exc: ValidationServiceError) -> JSONResponse:
+        """Translate business-rule validation rejections into HTTP 400 responses."""
+        error_code = VALIDATION_ERROR_CODE_MAP.get(type(exc), "VALIDATION_ERROR")
+        logger.warning("Validation rejected", extra={"error_code": error_code, "detail": str(exc)})
+        return JSONResponse(
+            status_code=400,
+            content=_error_payload(error=error_code, message=str(exc)),
         )
 
     @app.exception_handler(RequestValidationError)

@@ -3,6 +3,13 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
+def _fit_payload(start_timestamp: int, start_value: float) -> dict[str, list[float] | list[int]]:
+    return {
+        "timestamps": [start_timestamp + i for i in range(30)],
+        "values": [start_value + (0.2 * i) for i in range(30)],
+    }
+
+
 def test_healthcheck_endpoint_returns_contract_payload(client: TestClient) -> None:
     """Healthcheck should expose required contract fields and metric groups."""
     response = client.get("/healthcheck")
@@ -18,7 +25,7 @@ def test_healthcheck_reflects_trained_series_and_non_negative_metrics(client: Te
     """Healthcheck should reflect activity after fit/predict requests."""
     client.post(
         "/fit/sensor_A",
-        json={"timestamps": [1, 2, 3], "values": [10.0, 11.0, 12.0]},
+        json=_fit_payload(start_timestamp=1, start_value=10.0),
     )
     client.post(
         "/predict/sensor_A",
