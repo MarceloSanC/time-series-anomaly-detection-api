@@ -11,12 +11,14 @@ from app.repository.model_repository import ModelRepository
 
 
 def _fitted_model(values: list[float]) -> AnomalyDetectionModel:
+    """Build and fit a model from a small list of values."""
     model = AnomalyDetectionModel()
     model.fit(TimeSeries(data=[DataPoint(timestamp=i + 1, value=v) for i, v in enumerate(values)]))
     return model
 
 
 def _metadata(version: str, n_samples: int) -> dict[str, object]:
+    """Create deterministic metadata payload used by repository tests."""
     return {
         "version": version,
         "mean": 10.0,
@@ -32,6 +34,7 @@ def _metadata(version: str, n_samples: int) -> dict[str, object]:
 
 
 def test_save_and_load_roundtrip(tmp_path: Path) -> None:
+    """Ensure saved model artifacts can be loaded back without data loss."""
     repository = ModelRepository(storage_path=tmp_path)
     model = _fitted_model([9.0, 10.0, 11.0])
 
@@ -45,6 +48,7 @@ def test_save_and_load_roundtrip(tmp_path: Path) -> None:
 
 
 def test_save_writes_index_atomically_and_without_tmp_residue(tmp_path: Path) -> None:
+    """Ensure index file is written atomically and temp residue is cleaned."""
     repository = ModelRepository(storage_path=tmp_path)
 
     repository.save(
@@ -67,6 +71,7 @@ def test_save_writes_index_atomically_and_without_tmp_residue(tmp_path: Path) ->
 
 
 def test_version_listing_and_exists(tmp_path: Path) -> None:
+    """Validate version index order and version existence checks."""
     repository = ModelRepository(storage_path=tmp_path)
 
     repository.save(
@@ -93,6 +98,7 @@ def test_version_listing_and_exists(tmp_path: Path) -> None:
 
 
 def test_list_all_returns_all_series_indexes(tmp_path: Path) -> None:
+    """Ensure repository listing returns index entries for every series."""
     repository = ModelRepository(storage_path=tmp_path)
 
     repository.save(
@@ -116,6 +122,7 @@ def test_list_all_returns_all_series_indexes(tmp_path: Path) -> None:
 
 
 def test_invalid_series_id_is_rejected(tmp_path: Path) -> None:
+    """Reject invalid series identifiers that attempt path traversal."""
     repository = ModelRepository(storage_path=tmp_path)
 
     with pytest.raises(ValueError):
@@ -123,6 +130,7 @@ def test_invalid_series_id_is_rejected(tmp_path: Path) -> None:
 
 
 def test_load_raises_file_not_found_for_missing_model(tmp_path: Path) -> None:
+    """Raise when requested model artifacts are missing from storage."""
     repository = ModelRepository(storage_path=tmp_path)
 
     with pytest.raises(FileNotFoundError):

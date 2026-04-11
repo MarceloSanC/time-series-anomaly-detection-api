@@ -4,7 +4,7 @@
 
 This is a production-oriented time series anomaly detection API built with FastAPI.
 The system supports multiple `series_id`, model versioning, persistence, and real-time inference.
-Development is time-constrained (5 days) with AI-assisted coding (GPT-codex + Claude Sonnet 4.6).
+Development is time-constrained (5 stages) with AI-assisted coding (GPT-codex + Claude Sonnet 4.6).
 The API contract for HTTP routes and payloads is defined by `docs/context/openapi_spec.yaml`.
 
 Always read this file in full at the start of every coding session before writing any code.
