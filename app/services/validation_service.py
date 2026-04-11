@@ -5,33 +5,16 @@ import logging
 import numpy as np
 
 from app.config import settings
+from app.domain.exceptions import (
+    ConstantSeriesError,
+    DuplicateTimestampsError,
+    InsufficientDataError,
+    InvalidValuesError,
+    UnorderedTimestampsError,
+)
 from app.domain.schemas import TimeSeries
 
 logger = logging.getLogger(__name__)
-
-
-class ValidationServiceError(ValueError):
-    """Base class for business-rule validation errors during training."""
-
-
-class InsufficientDataError(ValidationServiceError):
-    """Raised when a series has fewer points than configured minimum."""
-
-
-class ConstantSeriesError(ValidationServiceError):
-    """Raised when a series standard deviation is effectively zero."""
-
-
-class DuplicateTimestampsError(ValidationServiceError):
-    """Raised when duplicate timestamps are found in training data."""
-
-
-class UnorderedTimestampsError(ValidationServiceError):
-    """Raised when timestamps are not strictly increasing."""
-
-
-class InvalidValuesError(ValidationServiceError):
-    """Raised when training values contain NaN or infinity."""
 
 
 class ValidationService:

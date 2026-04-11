@@ -4,9 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from app.domain.exceptions import SeriesNotFoundError, VersionNotFoundError
 from app.domain.schemas import DataPoint, TimeSeries
 from app.repository.model_repository import ModelRepository
-from app.services.model_service import ModelService, SeriesNotFoundError, VersionNotFoundError
+from app.services.model_service import ModelService
 from app.services.validation_service import ValidationService
 from app.utils.concurrency import LockManager
 
