@@ -26,6 +26,11 @@ dev = [
   "pytest-cov==5.0.0"
 ]
 
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*", "storage*", "docs*"]
+namespaces = false
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
