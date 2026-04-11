@@ -1,4 +1,4 @@
-# ROADMAP — 5-DAY EXECUTION PLAN
+# ROADMAP — 5-STAGE EXECUTION PLAN
 
 ## RULE ZERO
 
@@ -10,7 +10,7 @@ This is non-negotiable. Do not rationalize exceptions.
 
 ---
 
-## DAY 1 — Foundation and Core Domain
+## STAGE 1 — Foundation and Core Domain
 
 **Goal:** ModelService working end-to-end with tests. No API yet.
 
@@ -39,20 +39,20 @@ This is non-negotiable. Do not rationalize exceptions.
    - `app/services/model_service.py` — `train(series_id, data)`, `predict(series_id, data_point, version=None)`, `list_series()`, `get_series_info(series_id)`
    - `app/services/metrics_service.py` — `record()`, `snapshot()`
 
-6. Unit tests (Day 1 does not end without these passing)
+6. Unit tests (Stage 1 does not end without these passing)
    - `tests/unit/test_model_service.py` — train, predict, version increment, series not found
    - `tests/unit/test_model_repository.py` — save/load roundtrip, atomic write, version listing
 
-### End of Day 1 Checkpoint
+### End of Stage 1 Checkpoint
 
 ```bash
 pytest tests/unit/ -v
-# All tests must pass before Day 2 starts
+# All tests must pass before Stage 2 starts
 ```
 
 ---
 
-## DAY 2 — API Layer and Docker
+## STAGE 2 — API Layer and Docker
 
 **Goal:** Full API running in Docker with all OpenAPI-defined endpoints.
 
@@ -88,7 +88,7 @@ pytest tests/unit/ -v
    - Verify versions increment on retrain
    - Verify `GET /healthcheck` returns contract-compatible payload
 
-### End of Day 2 Checkpoint
+### End of Stage 2 Checkpoint
 
 ```bash
 docker-compose up -d
@@ -101,7 +101,7 @@ pytest tests/ -v
 
 ---
 
-## DAY 3 — Validation, Robustness, and Versioning Extensions
+## STAGE 3 — Validation, Robustness, and Versioning Extensions
 
 **Goal:** Preflight validation complete, versioning fully operational, error handling production-quality.
 
@@ -127,7 +127,7 @@ pytest tests/ -v
    - Verify no endpoint returns a raw Python exception under any input
    - Add `series_id` sanitization (reject path traversal characters: `/`, `..`, `\`)
 
-### End of Day 3 Checkpoint
+### End of Stage 3 Checkpoint
 
 ```bash
 # Test constant series rejection
@@ -142,7 +142,7 @@ pytest tests/ -v
 
 ---
 
-## DAY 4 — Performance Testing and Visualization
+## STAGE 4 — Performance Testing and Visualization
 
 **Goal:** Benchmark results documented, plot endpoint working.
 
@@ -171,7 +171,7 @@ pytest tests/ -v
    - Benchmark results table
    - Known limitations section
 
-### End of Day 4 Checkpoint
+### End of Stage 4 Checkpoint
 
 ```bash
 python scripts/benchmark.py
@@ -183,7 +183,7 @@ curl "http://localhost:8000/plot?series_id=sensor_XYZ" --output plot.png
 
 ---
 
-## DAY 5 — Polish, Documentation, and Delivery
+## STAGE 5 — Polish, Documentation, and Delivery
 
 **Goal:** Repository is clean, documented, and ready for evaluation.
 
@@ -239,7 +239,7 @@ curl "http://localhost:8000/plot?series_id=sensor_XYZ" --output plot.png
 
 ## TIME BUDGET (approximate)
 
-| Day | Focus                        | Risk if skipped         |
+| Stage | Focus                        | Risk if skipped         |
 |-----|------------------------------|-------------------------|
 | 1   | Domain + Service + Tests     | Everything else breaks  |
 | 2   | API + Docker + Integration   | Nothing is deliverable  |

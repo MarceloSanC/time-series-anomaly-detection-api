@@ -29,7 +29,7 @@ Read before every coding session.
 At the start of every session with either model:
 
 1. Paste `docs/ai/skills.md` in full as the first message (system context)
-2. State which day of the roadmap you are on
+2. State which stage of the roadmap you are on
 3. State which layer you are working in (domain / services / repository / api / utils / tests)
 4. State which files already exist and are complete
 5. State what you need generated or reviewed
@@ -41,7 +41,7 @@ Example session opener:
 ---
 
 Context:
-- Day: 2
+- Stage: 2
 - Layer: api/routes
 - Already complete: domain/schemas.py, domain/models.py, services/model_service.py, repository/model_repository.py, utils/concurrency.py
 - Task: Generate app/api/routes/fit.py for POST /fit/{series_id}
@@ -153,7 +153,7 @@ If either model suggests:
 - A new endpoint not in the spec or enhancement list → reject
 - A new dependency → evaluate cost/benefit explicitly, default to reject
 - Changing the anomaly detection algorithm → reject (out of scope)
-- An abstraction layer not in the project structure → reject unless Day 5 polish
+- An abstraction layer not in the project structure → reject unless Stage 5 polish
 
 When in doubt, ask: "Does this help deliver the MVP faster, or does it add complexity?"
 If it adds complexity and the MVP is not done: reject.

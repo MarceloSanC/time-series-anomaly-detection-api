@@ -4,15 +4,21 @@ from pydantic import BaseModel, Field
 
 
 class DataPoint(BaseModel):
+    """Single timestamped measurement in a time series."""
+
     timestamp: int = Field(..., description="Unix timestamp")
     value: float = Field(..., description="Measured value")
 
 
 class TimeSeries(BaseModel):
+    """Ordered collection of data points used for model training."""
+
     data: Sequence[DataPoint] = Field(..., description="Ordered list of data points")
 
 
 class TrainResponse(BaseModel):
+    """Internal response payload returned after training a model version."""
+
     series_id: str
     version: str
     n_samples: int
@@ -23,6 +29,8 @@ class TrainResponse(BaseModel):
 
 
 class PredictionResponse(BaseModel):
+    """Internal response payload returned for a prediction request."""
+
     series_id: str
     version: str
     is_anomaly: bool
@@ -33,6 +41,8 @@ class PredictionResponse(BaseModel):
 
 
 class ModelInfo(BaseModel):
+    """Summary metadata for a trained time-series model lineage."""
+
     series_id: str
     latest_version: str
     versions: list[str]
@@ -41,6 +51,8 @@ class ModelInfo(BaseModel):
 
 
 class ErrorResponse(BaseModel):
+    """Standardized error payload used by API error handlers."""
+
     error: str
     message: str
     detail: Optional[str] = None

@@ -9,7 +9,10 @@ import numpy as np
 
 
 class MetricsService:
+    """In-memory collector for request volume, errors, and latency stats."""
+
     def __init__(self, latency_window_size: int = 1000) -> None:
+        """Initialize metrics structures with a bounded latency window."""
         self._request_count: dict[str, int] = defaultdict(int)
         self._total_time_ms: dict[str, float] = defaultdict(float)
         self._latencies_ms: dict[str, deque[float]] = defaultdict(
@@ -20,6 +23,7 @@ class MetricsService:
         self._lock = Lock()
 
     def record(self, endpoint: str, duration_ms: float, error: bool = False) -> None:
+        """Record one request measurement for a given endpoint."""
         with self._lock:
             self._request_count[endpoint] += 1
             self._total_time_ms[endpoint] += duration_ms
@@ -30,6 +34,7 @@ class MetricsService:
                 self._error_count[endpoint] += 1
 
     def snapshot(self) -> dict[str, Any]:
+        """Return an aggregated metrics snapshot for all tracked endpoints."""
         with self._lock:
             output: dict[str, dict[str, float | int | None]] = {}
             for endpoint, count in self._request_count.items():

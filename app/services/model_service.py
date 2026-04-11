@@ -14,25 +14,36 @@ logger = logging.getLogger(__name__)
 
 
 class SupportsSeriesLock(Protocol):
+    """Protocol for lock providers keyed by `series_id`."""
+
+    # TODO(stage3): tighten return type to ContextManager[Any] (or equivalent lock interface).
     def get_lock(self, series_id: str) -> Any:
         ...
 
 
 class SeriesNotFoundError(Exception):
+    # TODO(stage3): move to app/domain/exceptions.py to keep exception ownership in domain layer.
     pass
 
 
 class VersionNotFoundError(Exception):
+    # TODO(stage3): move to app/domain/exceptions.py to keep exception ownership in domain layer.
     pass
 
 
 class ModelService:
+    """Service layer that orchestrates train/predict/versioning operations."""
+
     def __init__(self, repository: ModelRepository, lock_manager: SupportsSeriesLock | None = None) -> None:
+        """Initialize service with repository and optional lock manager."""
         self.repository = repository
         self.lock_manager = lock_manager
 
     def train(self, series_id: str, data: TimeSeries) -> TrainResponse:
+        """Train and persist a new model version for a series."""
         lock_ctx = self.lock_manager.get_lock(series_id) if self.lock_manager is not None else nullcontext()
+        # TODO(stage3): optionally validate lock_ctx supports __enter__/__exit__ at runtime.
+        # TODO(stage3): evaluate enforcing threading.Lock-compatible lock objects in infra layer.
         logger.info("Training started", extra={"series_id": series_id})
 
         with lock_ctx:
@@ -72,6 +83,7 @@ class ModelService:
             )
 
     def predict(self, series_id: str, data_point: DataPoint, version: str | None = None) -> PredictionResponse:
+        """Run anomaly prediction using latest or a specific model version."""
         resolved_version = self._resolve_version(series_id=series_id, version=version)
         model, _metadata = self.repository.load(series_id=series_id, version=resolved_version)
 
@@ -95,9 +107,11 @@ class ModelService:
         )
 
     def list_series(self) -> list[dict[str, Any]]:
+        """List all tracked series index entries."""
         return self.repository.list_all()
 
     def get_series_info(self, series_id: str) -> ModelInfo:
+        """Return metadata for the latest trained version of a series."""
         index = self.repository.get_index(series_id)
         if index is None:
             raise SeriesNotFoundError(f"Series '{series_id}' not found")
@@ -114,6 +128,7 @@ class ModelService:
         )
 
     def _next_version(self, series_id: str) -> str:
+        """Compute next incremental version label for a series."""
         index = self.repository.get_index(series_id)
         if index is None:
             return "v1"
@@ -126,6 +141,7 @@ class ModelService:
         return f"v{latest_number + 1}"
 
     def _resolve_version(self, series_id: str, version: str | None) -> str:
+        """Resolve requested version or fallback to latest available version."""
         index = self.repository.get_index(series_id)
         if index is None:
             raise SeriesNotFoundError(f"Series '{series_id}' not found")
