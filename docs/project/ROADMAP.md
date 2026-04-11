@@ -5,6 +5,8 @@
 **No enhancement work begins before the MVP checklist in `docs/ai/skills.md` is 100% complete.**
 This is non-negotiable. Do not rationalize exceptions.
 
+**Scope note:** Although preflight validation, benchmarking, and plotting are listed as optional enhancements in the original challenge description, they are treated as required deliverables in this project plan.
+
 ---
 
 ## DAY 1 — Foundation and Core Domain
@@ -72,7 +74,7 @@ pytest tests/unit/ -v
    - `app/api/error_handlers.py` — catch domain exceptions, return `ErrorResponse` with correct status codes
 
 5. Docker
-   - `Dockerfile` — multi-stage build, non-root user
+   - `Dockerfile` — single-stage build (`python:3.11-slim`), non-root user
    - `docker-compose.yml` — mounts `./storage` as volume
 
 6. Integration tests
