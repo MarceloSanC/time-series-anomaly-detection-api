@@ -3,7 +3,10 @@ from __future__ import annotations
 import logging
 import uuid
 from contextvars import ContextVar, Token
-from typing import Any
+from typing import Awaitable, Callable
+
+from starlette.requests import Request
+from starlette.responses import Response
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="none")
 
@@ -50,7 +53,9 @@ def get_request_id() -> str:
     return request_id_var.get("none")
 
 
-async def request_id_middleware(request: Any, call_next: Any) -> Any:
+async def request_id_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     token = set_request_id()
     try:
         response = await call_next(request)
