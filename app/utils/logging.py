@@ -3,10 +3,6 @@ from __future__ import annotations
 import logging
 import uuid
 from contextvars import ContextVar, Token
-from typing import Awaitable, Callable
-
-from starlette.requests import Request
-from starlette.responses import Response
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="none")
 
@@ -57,17 +53,3 @@ def reset_request_id(token: Token[str]) -> None:
 def get_request_id() -> str:
     """Get request_id from current context or fallback value."""
     return request_id_var.get("none")
-
-
-async def request_id_middleware(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    """Attach request_id context to request lifecycle and response header."""
-    # TODO(stage2/stage3): move middleware to api layer (app/main.py or app/api/middleware.py).
-    token = set_request_id()
-    try:
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = get_request_id()
-        return response
-    finally:
-        reset_request_id(token)
