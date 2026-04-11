@@ -123,7 +123,7 @@ pytest tests/ -v
    - `tests/unit/test_validation_service.py` — one passing + one rejection case per rule (10 tests minimum)
 
 5. Review and harden
-   - Verify all error responses match `ErrorResponse` schema
+   - Standardize runtime error payloads (without changing `/context` contracts)
    - Verify no endpoint returns a raw Python exception under any input
    - Add `series_id` sanitization (reject path traversal characters: `/`, `..`, `\`)
 
@@ -134,7 +134,7 @@ pytest tests/ -v
 curl -X POST http://localhost:8000/fit/sensor_flat \
   -H "Content-Type: application/json" \
   -d '{"timestamps": [1,2,3], "values": [5.0,5.0,5.0]}'
-# Must return 400 with error code CONSTANT_SERIES
+# Must reject constant series with a client error (4xx) and stable runtime error code
 
 pytest tests/ -v
 # All tests pass
