@@ -11,6 +11,7 @@ from app.api.error_handlers import register_error_handlers
 from app.api.middleware import request_id_middleware
 from app.api.routes import api_router
 from app.config import settings
+from app.repository.model_repository import ModelRepository
 from app.services.metrics_service import MetricsService
 from app.utils.concurrency import LockManager
 from app.utils.logging import setup_logging
@@ -19,6 +20,7 @@ from app.utils.logging import setup_logging
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialize and expose shared app services during process lifetime."""
+    app.state.model_repository = ModelRepository(storage_path=settings.storage_path)
     app.state.lock_manager = LockManager()
     app.state.metrics_service = MetricsService(latency_window_size=settings.latency_window_size)
     yield
