@@ -6,6 +6,7 @@ import logging
 from time import perf_counter
 from typing import Any, Protocol
 
+from app.domain.exceptions import SeriesNotFoundError, VersionNotFoundError
 from app.domain.models import AnomalyDetectionModel
 from app.domain.schemas import DataPoint, ModelInfo, PredictionResponse, TimeSeries, TrainResponse
 from app.repository.model_repository import ModelRepository
@@ -20,16 +21,6 @@ class SupportsSeriesLock(Protocol):
     # TODO(stage3): tighten return type to ContextManager[Any] (or equivalent lock interface).
     def get_lock(self, series_id: str) -> Any:
         ...
-
-
-class SeriesNotFoundError(Exception):
-    # TODO(stage3): move to app/domain/exceptions.py to keep exception ownership in domain layer.
-    pass
-
-
-class VersionNotFoundError(Exception):
-    # TODO(stage3): move to app/domain/exceptions.py to keep exception ownership in domain layer.
-    pass
 
 
 class ModelService:

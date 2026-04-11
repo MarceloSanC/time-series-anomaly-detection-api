@@ -7,15 +7,15 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-# TODO(stage3): import domain exceptions from app/domain/exceptions.py after migration.
-from app.services.model_service import SeriesNotFoundError, VersionNotFoundError
-from app.services.validation_service import (
+from app.domain.exceptions import (
     ConstantSeriesError,
     DuplicateTimestampsError,
     InsufficientDataError,
     InvalidValuesError,
-    UnorderedTimestampsError,
+    SeriesNotFoundError,
     ValidationServiceError,
+    VersionNotFoundError,
+    UnorderedTimestampsError,
 )
 
 logger = logging.getLogger(__name__)
