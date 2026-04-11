@@ -6,6 +6,7 @@
 This is non-negotiable. Do not rationalize exceptions.
 
 **Scope note:** Although preflight validation, benchmarking, and plotting are listed as optional enhancements in the original challenge description, they are treated as required deliverables in this project plan.
+**API contract note:** The HTTP contract must follow `docs/context/openapi_spec.yaml` as the source of truth for routes, request payloads, and response payloads.
 
 ---
 
@@ -53,7 +54,7 @@ pytest tests/unit/ -v
 
 ## DAY 2 — API Layer and Docker
 
-**Goal:** Full API running in Docker with all mandatory endpoints.
+**Goal:** Full API running in Docker with all OpenAPI-defined endpoints.
 
 ### Tasks (in order)
 
@@ -63,12 +64,11 @@ pytest tests/unit/ -v
 2. Dependency injection
    - `app/dependencies.py` — `get_model_service()`, `get_metrics_service()`, `get_lock_manager()`
 
-3. Route handlers (one file per domain)
-   - `app/api/routes/train.py` — `POST /train/{series_id}`
-   - `app/api/routes/predict.py` — `POST /predict/{series_id}` + `?version=` query param
-   - `app/api/routes/models.py` — `GET /models`, `GET /models/{series_id}`
-   - `app/api/routes/health.py` — `GET /health`
-   - `app/api/routes/metrics.py` — `GET /metrics`
+3. Route handlers (strict OpenAPI contract)
+   - `app/api/routes/fit.py` — `POST /fit/{series_id}`
+   - `app/api/routes/predict.py` — `POST /predict/{series_id}` + optional `?version=` query param
+   - `app/api/routes/healthcheck.py` — `GET /healthcheck`
+   - Implement request/response mapping exactly as defined in `docs/context/openapi_spec.yaml`
 
 4. Error handlers
    - `app/api/error_handlers.py` — catch domain exceptions, return `ErrorResponse` with correct status codes
@@ -78,21 +78,21 @@ pytest tests/unit/ -v
    - `docker-compose.yml` — mounts `./storage` as volume
 
 6. Integration tests
-   - `tests/integration/test_train_endpoint.py`
+   - `tests/integration/test_fit_endpoint.py`
    - `tests/integration/test_predict_endpoint.py`
-   - `tests/integration/test_metrics_endpoint.py`
+   - `tests/integration/test_healthcheck_endpoint.py`
 
 7. Manual smoke test
    - Train 3 different `series_id` values
    - Predict on each
    - Verify versions increment on retrain
-   - Verify `GET /models` lists all 3
+   - Verify `GET /healthcheck` returns contract-compatible payload
 
 ### End of Day 2 Checkpoint
 
 ```bash
 docker-compose up -d
-curl http://localhost:8000/health
+curl http://localhost:8000/healthcheck
 # Must return 200
 
 pytest tests/ -v
@@ -116,8 +116,8 @@ pytest tests/ -v
    - Update `error_handlers.py` to catch each and return correct status + error code
 
 3. Versioning extensions
-   - Ensure `GET /predict/{series_id}?version=v2` works correctly
-   - Ensure `GET /models/{series_id}` returns full version history with metadata per version
+   - Ensure `POST /predict/{series_id}?version=v2` works correctly
+   - Ensure retraining by `series_id` increments version and keeps previous versions addressable by `?version=`
 
 4. Unit tests for validation
    - `tests/unit/test_validation_service.py` — one passing + one rejection case per rule (10 tests minimum)
@@ -131,9 +131,9 @@ pytest tests/ -v
 
 ```bash
 # Test constant series rejection
-curl -X POST http://localhost:8000/train/sensor_flat \
+curl -X POST http://localhost:8000/fit/sensor_flat \
   -H "Content-Type: application/json" \
-  -d '{"data": [{"timestamp": 1, "value": 5.0}, ...]}'
+  -d '{"timestamps": [1,2,3], "values": [5.0,5.0,5.0]}'
 # Must return 400 with error code CONSTANT_SERIES
 
 pytest tests/ -v
@@ -162,7 +162,7 @@ pytest tests/ -v
    - Return `StreamingResponse` with `media_type="image/png"`
 
 3. Sample request scripts
-   - `scripts/examples/train_request.sh` — curl command with realistic sample data
+   - `scripts/examples/fit_request.sh` — curl command with realistic sample data for `POST /fit/{series_id}`
    - `scripts/examples/predict_request.sh` — curl command for single point prediction
 
 4. README draft
@@ -220,13 +220,13 @@ curl "http://localhost:8000/plot?series_id=sensor_XYZ" --output plot.png
 ### Final Delivery Checklist
 
 - [ ] `docker-compose up` works from zero
-- [ ] `GET /health` returns 200
+- [ ] `GET /healthcheck` returns 200
 - [ ] Train + predict cycle works for 3 distinct `series_id`
 - [ ] Retrain creates new version, old version still accessible
 - [ ] `?version=v1` on a v3 series returns correct result
 - [ ] Constant series rejected with 400
 - [ ] Insufficient data rejected with 400
-- [ ] `GET /metrics` returns latency data
+- [ ] `GET /healthcheck` returns OpenAPI-compatible metrics payload
 - [ ] `/plot` returns PNG
 - [ ] Benchmark ran and results in README
 - [ ] All tests pass: `pytest -v`

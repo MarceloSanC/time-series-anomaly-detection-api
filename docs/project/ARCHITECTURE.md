@@ -100,7 +100,7 @@ def write_index_atomically(index_path: Path, data: dict) -> None:
 
 ## 6. API DESIGN: RESTful with consistent error contract
 
-**Decision:** Follow the provided OpenAPI spec exactly. Use `ErrorResponse` for all error cases. Support `?version=` query param on predict.
+**Decision:** Follow `docs/context/openapi_spec.yaml` exactly for HTTP routes and payload contracts. Internal domain models may differ, but the API layer must map to/from the OpenAPI schema.
 
 **Error response schema (non-negotiable):**
 ```json
@@ -112,7 +112,7 @@ def write_index_atomically(index_path: Path, data: dict) -> None:
 }
 ```
 
-**Status code mapping:** Defined in `docs/ai/skills.md`. Do not invent new status codes.
+**Status code mapping:** Follow the OpenAPI contract first; use internal error codes only when they map cleanly to the API responses.
 
 ---
 

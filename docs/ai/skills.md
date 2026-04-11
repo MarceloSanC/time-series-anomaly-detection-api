@@ -5,6 +5,7 @@
 This is a production-oriented time series anomaly detection API built with FastAPI.
 The system supports multiple `series_id`, model versioning, persistence, and real-time inference.
 Development is time-constrained (5 days) with AI-assisted coding (GPT-codex + Claude Sonnet 4.6).
+The API contract for HTTP routes and payloads is defined by `docs/context/openapi_spec.yaml`.
 
 Always read this file in full at the start of every coding session before writing any code.
 
@@ -71,12 +72,10 @@ anomaly-detection-api/
 │   │
 │   ├── api/
 │   │   ├── routes/
-│   │   │   ├── train.py
+│   │   │   ├── fit.py
 │   │   │   ├── predict.py
-│   │   │   ├── models.py
-│   │   │   ├── metrics.py
 │   │   │   ├── plot.py
-│   │   │   └── health.py
+│   │   │   └── healthcheck.py
 │   │   └── error_handlers.py     # Global exception handlers
 │   │
 │   └── utils/
@@ -90,14 +89,14 @@ anomaly-detection-api/
 │   │   ├── test_validation_service.py
 │   │   └── test_model_repository.py
 │   └── integration/
-│       ├── test_train_endpoint.py
+│       ├── test_fit_endpoint.py
 │       ├── test_predict_endpoint.py
-│       └── test_metrics_endpoint.py
+│       └── test_healthcheck_endpoint.py
 │
 ├── scripts/
 │   ├── benchmark.py              # Load test: 100 parallel inference requests
 │   └── examples/
-│       ├── train_request.sh
+│       ├── fit_request.sh
 │       └── predict_request.sh
 │
 ├── storage/                      # Created at runtime, git-ignored
@@ -114,7 +113,17 @@ anomaly-detection-api/
 
 ---
 
-## DATA SCHEMAS (source of truth)
+## INTERNAL DOMAIN SCHEMAS (source of truth for domain/services)
+
+For API request/response payloads, follow `docs/context/openapi_spec.yaml` exactly.
+
+API/domain mapping contract (must happen in `api/` layer):
+
+- `Trainining.TrainData.timestamps` + `Trainining.TrainData.values` -> `TimeSeries.data[]`
+- `Prediction.PredictData.timestamp` (OpenAPI `string`) -> internal `DataPoint.timestamp` (`int`)
+- Internal `TrainResponse.n_samples` -> OpenAPI `Trainining.TrainResponse.points_used`
+- Internal `PredictionResponse.is_anomaly` -> OpenAPI `Prediction.PredictResponse.anomaly`
+- Internal `PredictionResponse.version` -> OpenAPI `Prediction.PredictResponse.model_version`
 
 ```python
 # domain/schemas.py
@@ -336,8 +345,8 @@ class MetricsService:
 
 - Versions are strings: `v1`, `v2`, `v3` — never timestamps as primary version identifier.
 - `index.json` per series tracks `latest_version` and ordered list of `versions`.
-- `GET /predict/{series_id}` → defaults to `latest_version`.
-- `GET /predict/{series_id}?version=v2` → loads specific version.
+- `POST /predict/{series_id}` → defaults to `latest_version` when `version` query param is omitted.
+- `POST /predict/{series_id}?version=v2` → loads specific version.
 - `index.json` must be written atomically (write-then-rename pattern).
 - Next version number is derived from `len(existing_versions) + 1`.
 
@@ -473,12 +482,9 @@ MAX_LATENCY_SAMPLES=1000
 
 ## MVP CHECKLIST (must be 100% complete before any enhancement)
 
-- [ ] `POST /train/{series_id}` — trains and persists model, returns version and metadata
+- [ ] `POST /fit/{series_id}` — trains and persists model, returns OpenAPI-compatible response
 - [ ] `POST /predict/{series_id}` — returns prediction with version (defaults to latest)
-- [ ] `GET /models` — lists all series with latest version info
-- [ ] `GET /models/{series_id}` — returns version history and metadata
-- [ ] `GET /health` — returns 200 with uptime
-- [ ] `GET /metrics` — returns per-endpoint latency and request count
+- [ ] `GET /healthcheck` — returns 200 with OpenAPI-compatible payload
 - [ ] Versioning: retraining same series_id creates new version, does not overwrite old
 - [ ] Persistence: models survive container restart
 - [ ] Docker: `docker-compose up` works from zero with no manual steps
@@ -490,7 +496,7 @@ MAX_LATENCY_SAMPLES=1000
 ## ENHANCEMENT CHECKLIST (only after MVP is complete)
 
 - [ ] Preflight validation (all 5 rules implemented and tested)
-- [ ] `GET /predict/{series_id}?version=v2` — predict with specific version
+- [ ] `POST /predict/{series_id}?version=v2` — predict with specific version
 - [ ] `GET /plot?series_id=X&version=v3` — visualization endpoint
 - [ ] `scripts/benchmark.py` — load test + results saved to JSON
 - [ ] Benchmark results documented in README
