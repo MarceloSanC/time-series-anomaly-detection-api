@@ -40,17 +40,42 @@ def test_predict_endpoint_uses_latest_model_when_version_not_provided(client: Te
     assert isinstance(payload["anomaly"], bool)
 
 
-def test_predict_endpoint_accepts_explicit_version_query_param(client: TestClient) -> None:
-    """Prediction should honor explicit version query parameter."""
+def test_predict_endpoint_accepts_explicit_v2_query_param(client: TestClient) -> None:
+    """Prediction should allow explicitly selecting version v2."""
     _train_baseline(client)
 
     response = client.post(
-        "/predict/sensor_A?version=v1",
-        json={"timestamp": "1700000200", "value": 15.0},
+        "/predict/sensor_A?version=v2",
+        json={"timestamp": "1700000201", "value": 15.0},
     )
 
     assert response.status_code == 200
-    assert response.json()["model_version"] == "v1"
+    assert response.json()["model_version"] == "v2"
+
+
+def test_predict_endpoint_keeps_old_versions_accessible_after_retrain(client: TestClient) -> None:
+    """Retraining should keep previous versions addressable via query param."""
+    _train_baseline(client)  # creates v1 and v2
+    third = client.post(
+        "/fit/sensor_A",
+        json=_fit_payload(start_timestamp=201, start_value=30.0),  # creates v3
+    )
+    assert third.status_code == 200
+    assert third.json()["version"] == "v3"
+
+    old_version_response = client.post(
+        "/predict/sensor_A?version=v1",
+        json={"timestamp": "1700000202", "value": 15.0},
+    )
+    latest_version_response = client.post(
+        "/predict/sensor_A",
+        json={"timestamp": "1700000203", "value": 15.0},
+    )
+
+    assert old_version_response.status_code == 200
+    assert latest_version_response.status_code == 200
+    assert old_version_response.json()["model_version"] == "v1"
+    assert latest_version_response.json()["model_version"] == "v3"
 
 
 def test_predict_endpoint_returns_404_for_unknown_series(client: TestClient) -> None:

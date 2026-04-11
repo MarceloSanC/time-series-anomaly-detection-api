@@ -104,6 +104,27 @@ def test_predict_raises_version_not_found(tmp_path: Path) -> None:
         service.predict(series_id="sensor_A", data_point=DataPoint(timestamp=1, value=5.0), version="v999")
 
 
+def test_predict_accepts_explicit_v2_version(tmp_path: Path) -> None:
+    """Allow predictions against explicitly requested v2 model version."""
+    repository = ModelRepository(storage_path=tmp_path)
+    service = ModelService(
+        repository=repository,
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+
+    service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
+    service.train(series_id="sensor_A", data=_series([10.0, 11.0, 12.0]))
+
+    prediction = service.predict(
+        series_id="sensor_A",
+        data_point=DataPoint(timestamp=99, value=20.0),
+        version="v2",
+    )
+
+    assert prediction.version == "v2"
+
+
 def test_get_series_info_returns_latest_metadata(tmp_path: Path) -> None:
     """Return latest version metadata for an existing series."""
     repository = ModelRepository(storage_path=tmp_path)
