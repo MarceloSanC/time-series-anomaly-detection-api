@@ -6,6 +6,7 @@
 - `project/ROADMAP.md`: plano de execucao por dia
 - `project/ARCHITECTURE.md`: decisoes de arquitetura
 - `project/API_RESPONSES.md`: responses HTTP esperados e mapeamentos API-interno
+- `project/STAGE2_SMOKE_TEST.md`: procedimento manual de smoke test da Stage 2
 - `process/GIT_PROTOCOL.md`: padrao de branches, commits e merge
 - `context/challenge_description.txt`: descricao base do desafio
 - `context/openapi_spec.yaml`: contrato HTTP oficial (source of truth para API)
