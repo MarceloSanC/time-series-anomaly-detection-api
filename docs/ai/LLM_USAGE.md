@@ -44,10 +44,11 @@ Context:
 - Day: 2
 - Layer: api/routes
 - Already complete: domain/schemas.py, domain/models.py, services/model_service.py, repository/model_repository.py, utils/concurrency.py
-- Task: Generate app/api/routes/train.py for POST /train/{series_id}
-  - Request body: TimeSeries (from domain/schemas.py)
-  - Success response: TrainResponse (from domain/schemas.py)
-  - Calls: model_service.train(series_id, data)
+- Task: Generate app/api/routes/fit.py for POST /fit/{series_id}
+  - Request body: Trainining.TrainData from docs/context/openapi_spec.yaml
+  - Success response: Trainining.TrainResponse from docs/context/openapi_spec.yaml
+  - Calls: model_service.train(series_id, mapped_time_series)
+  - Must map fields: timestamps/values -> TimeSeries.data; n_samples -> points_used; prediction timestamp string -> internal int
   - Error handling: SeriesValidationError → 400, unexpected → 500
   - Must include: request timing, structured logging with request_id
 ```
