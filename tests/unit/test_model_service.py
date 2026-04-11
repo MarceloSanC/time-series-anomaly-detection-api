@@ -37,14 +37,7 @@ def test_predict_uses_latest_version_by_default(tmp_path: Path) -> None:
     repository = ModelRepository(storage_path=tmp_path)
     service = ModelService(repository=repository, lock_manager=LockManager())
 
-    # TODO(stage1-polish): replace tautological upper_bound assertion below.
-    # Current expression simplifies to `prediction.upper_bound == prediction.upper_bound`.
-    # Fix strategy:
-    # 1) Capture train response from `service.train(...)`.
-    # 2) Assert `prediction.mean == train_response.mean`.
-    # 3) Assert `prediction.upper_bound == train_response.mean + 3 * train_response.std`.
-    # This ensures predict() upper bound is validated against learned training statistics.
-    service.train(series_id="sensor_A", data=_series([10.0, 11.0, 12.0, 13.0]))
+    train_response = service.train(series_id="sensor_A", data=_series([10.0, 11.0, 12.0, 13.0]))
 
     prediction = service.predict(series_id="sensor_A", data_point=DataPoint(timestamp=100, value=99.0))
 
@@ -52,7 +45,8 @@ def test_predict_uses_latest_version_by_default(tmp_path: Path) -> None:
     assert prediction.version == "v1"
     assert prediction.value == 99.0
     assert prediction.timestamp == 100
-    assert prediction.upper_bound == pytest.approx(prediction.mean + 3 * (prediction.upper_bound - prediction.mean) / 3)
+    assert prediction.mean == pytest.approx(train_response.mean)
+    assert prediction.upper_bound == pytest.approx(train_response.mean + 3 * train_response.std)
     assert isinstance(prediction.is_anomaly, bool)
 
 
@@ -93,22 +87,15 @@ def test_get_series_info_returns_latest_metadata(tmp_path: Path) -> None:
     repository = ModelRepository(storage_path=tmp_path)
     service = ModelService(repository=repository, lock_manager=LockManager())
 
-    # TODO(stage1-polish): train with different sample sizes across versions.
-    # Current setup uses 3 samples for both v1 and v2, so `info.n_samples == 3`
-    # does not prove metadata came from latest version.
-    # Suggested fix:
-    # - v1: 3 samples
-    # - v2: 5 samples
-    # - assert `info.latest_version == "v2"` and `info.n_samples == 5`.
     service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
-    service.train(series_id="sensor_A", data=_series([2.0, 3.0, 4.0]))
+    service.train(series_id="sensor_A", data=_series([2.0, 3.0, 4.0, 5.0, 6.0]))
 
     info = service.get_series_info("sensor_A")
 
     assert info.series_id == "sensor_A"
     assert info.latest_version == "v2"
     assert info.versions == ["v1", "v2"]
-    assert info.n_samples == 3
+    assert info.n_samples == 5
 
 
 def test_get_series_info_raises_series_not_found(tmp_path: Path) -> None:
