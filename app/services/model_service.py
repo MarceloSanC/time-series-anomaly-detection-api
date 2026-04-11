@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from app.domain.models import AnomalyDetectionModel
 from app.domain.schemas import DataPoint, ModelInfo, PredictionResponse, TimeSeries, TrainResponse
 from app.repository.model_repository import ModelRepository
+from app.services.validation_service import ValidationService
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +35,20 @@ class VersionNotFoundError(Exception):
 class ModelService:
     """Service layer that orchestrates train/predict/versioning operations."""
 
-    def __init__(self, repository: ModelRepository, lock_manager: SupportsSeriesLock | None = None) -> None:
+    def __init__(
+        self,
+        repository: ModelRepository,
+        lock_manager: SupportsSeriesLock | None = None,
+        validation_service: ValidationService | None = None,
+    ) -> None:
         """Initialize service with repository and optional lock manager."""
         self.repository = repository
         self.lock_manager = lock_manager
+        self.validation_service = ValidationService() if validation_service is None else validation_service
 
     def train(self, series_id: str, data: TimeSeries) -> TrainResponse:
         """Train and persist a new model version for a series."""
+        self.validation_service.validate_training_data(data)
         lock_ctx = self.lock_manager.get_lock(series_id) if self.lock_manager is not None else nullcontext()
         # TODO(stage3): optionally validate lock_ctx supports __enter__/__exit__ at runtime.
         # TODO(stage3): evaluate enforcing threading.Lock-compatible lock objects in infra layer.

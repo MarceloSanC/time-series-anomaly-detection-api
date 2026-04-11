@@ -3,15 +3,22 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
+def _fit_payload(start_timestamp: int, start_value: float) -> dict[str, list[float] | list[int]]:
+    return {
+        "timestamps": [start_timestamp + i for i in range(30)],
+        "values": [start_value + (0.2 * i) for i in range(30)],
+    }
+
+
 def _train_baseline(client: TestClient) -> None:
     """Create two versions so prediction can resolve latest and explicit versions."""
     first = client.post(
         "/fit/sensor_A",
-        json={"timestamps": [1, 2, 3], "values": [10.0, 11.0, 12.0]},
+        json=_fit_payload(start_timestamp=1, start_value=10.0),
     )
     second = client.post(
         "/fit/sensor_A",
-        json={"timestamps": [4, 5, 6], "values": [20.0, 21.0, 22.0]},
+        json=_fit_payload(start_timestamp=101, start_value=20.0),
     )
     assert first.status_code == 200
     assert second.status_code == 200
