@@ -106,6 +106,12 @@ curl "http://localhost:8000/plot?series_id=sensor_XYZ" --output plot.png
 curl "http://localhost:8000/plot?series_id=sensor_XYZ&version=v1" --output plot_v1.png
 ```
 
+Example output:
+
+![Plot endpoint example showing training points, mean line, and +/-3 sigma bounds](docs/assets/plot_example.png)
+
+The image shows training points (scatter), the model mean, and upper/lower 3-sigma thresholds.
+
 ## Benchmark
 
 Run Stage 4 benchmark (100 parallel inference requests):

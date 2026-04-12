@@ -219,21 +219,21 @@ curl "http://localhost:8000/plot?series_id=sensor_XYZ" --output plot.png
 
 ### Final Delivery Checklist
 
-- [ ] `docker-compose up` works from zero
-- [ ] `GET /healthcheck` returns 200
-- [ ] Train + predict cycle works for 3 distinct `series_id`
-- [ ] Retrain creates new version, old version still accessible
-- [ ] `?version=v1` on a v3 series returns correct result
-- [ ] Constant series rejected with 400
-- [ ] Insufficient data rejected with 400
-- [ ] `GET /healthcheck` returns OpenAPI-compatible metrics payload
-- [ ] `/plot` returns PNG
-- [ ] Benchmark ran and results in README
-- [ ] All tests pass: `pytest -v`
-- [ ] README has setup instructions that work
-- [ ] `.env.example` present and complete
-- [ ] No raw exceptions exposed to clients
-- [ ] `request_id` in log lines
+- [x] `docker-compose up` works from zero
+- [x] `GET /healthcheck` returns 200
+- [x] Train + predict cycle works for 3 distinct `series_id`
+- [x] Retrain creates new version, old version still accessible
+- [x] `?version=v1` on a v3 series returns correct result
+- [x] Constant series rejected with 400
+- [x] Insufficient data rejected with 400
+- [x] `GET /healthcheck` returns OpenAPI-compatible metrics payload
+- [x] `/plot` returns PNG
+- [x] Benchmark ran and results in README
+- [x] All tests pass: `pytest -v`
+- [x] README has setup instructions that work
+- [x] `.env.example` present and complete
+- [x] No raw exceptions exposed to clients
+- [x] `request_id` in log lines
 
 ---
 
