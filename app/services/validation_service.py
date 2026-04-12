@@ -39,6 +39,10 @@ class ValidationService:
                 f"At least {self.min_data_points} data points are required; got {len(points)}"
             )
 
+        if not bool(np.isfinite(values).all()):
+            logger.warning("Validation rejected: invalid values")
+            raise InvalidValuesError("Training data contains NaN or infinite values")
+
         std = float(np.std(values))
         if std < self.std_threshold:
             logger.warning(
@@ -56,7 +60,3 @@ class ValidationService:
         if any(next_ts <= current_ts for current_ts, next_ts in zip(timestamps, timestamps[1:])):
             logger.warning("Validation rejected: unordered timestamps")
             raise UnorderedTimestampsError("Timestamps must be strictly increasing")
-
-        if not bool(np.isfinite(values).all()):
-            logger.warning("Validation rejected: invalid values")
-            raise InvalidValuesError("Training data contains NaN or infinite values")
