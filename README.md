@@ -113,14 +113,14 @@ Latest recorded run:
 
 | Metric | Value |
 |---|---:|
-| p50 (ms) | 258.28 |
-| p95 (ms) | 293.71 |
-| p99 (ms) | 297.38 |
-| avg (ms) | 227.05 |
-| min (ms) | 19.35 |
-| max (ms) | 298.01 |
-| throughput (req/s) | 321.96 |
-| total duration (s) | 0.31 |
+| p50 (ms) | 211.26 |
+| p95 (ms) | 279.84 |
+| p99 (ms) | 282.96 |
+| avg (ms) | 204.03 |
+| min (ms) | 19.92 |
+| max (ms) | 283.93 |
+| throughput (req/s) | 336.42 |
+| total duration (s) | 0.30 |
 
 Interpretation:
 - `min` usually reflects early requests that reached a less busy server state.
