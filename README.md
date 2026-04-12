@@ -37,13 +37,20 @@ docker compose up --build -d
 curl http://localhost:8000/healthcheck
 ```
 
-To run tests locally:
+Verified from-scratch test flow (clone -> up -> test):
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 pytest -v
+```
+
+Optional container-only validation:
+
+```bash
+docker compose up --build -d
+docker compose logs -f api
 ```
 
 ## Endpoint Examples
@@ -134,9 +141,19 @@ Interpretation:
 - Persistence is local filesystem (`storage/`), suitable for single-instance deployments.
 - `/plot` requires metadata that includes `training_data`; legacy models without it return `422 PLOT_DATA_UNAVAILABLE`.
 
+## Architecture Decisions (Brief)
+
+- Persistence uses local filesystem artifacts (`joblib` + `metadata.json`) under `storage/{series_id}/{version}`.
+- Concurrency uses per-series locks (`threading.Lock`) to serialize retraining of the same `series_id`.
+- Validation is fail-fast and runs before training lock acquisition.
+- API contract follows `docs/context/openapi_spec.yaml`; internal schemas are mapped in the API layer.
+- Metrics are in-memory with bounded latency windows for percentile calculations.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and adjust as needed.
+`.env.example` is a documented baseline with safe defaults for local execution and Docker.
+Use `.env` for real runtime values and keep it untracked.
 
 | Variable | Default | Description |
 |---|---|---|
