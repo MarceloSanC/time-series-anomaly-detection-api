@@ -160,3 +160,30 @@ def test_load_metadata_returns_metadata_without_loading_model(tmp_path: Path) ->
 
     assert metadata["version"] == "v1"
     assert metadata["n_samples"] == 3
+
+
+def test_load_metadata_raises_file_not_found_when_missing(tmp_path: Path) -> None:
+    """Raise when metadata file does not exist for requested series/version."""
+    repository = ModelRepository(storage_path=tmp_path)
+
+    with pytest.raises(FileNotFoundError):
+        repository.load_metadata(series_id="sensor_A", version="v1")
+
+
+def test_list_all_skips_non_directory_and_series_without_index(tmp_path: Path) -> None:
+    """Ignore non-directory entries and folders that do not contain index.json."""
+    repository = ModelRepository(storage_path=tmp_path)
+
+    (tmp_path / "README.txt").write_text("ignore me", encoding="utf-8")
+    (tmp_path / "orphan_series").mkdir(parents=True, exist_ok=True)
+    repository.save(
+        series_id="sensor_A",
+        version="v1",
+        model=_fitted_model([1.0, 2.0, 3.0]),
+        metadata=_metadata("v1", 3),
+    )
+
+    indexes = repository.list_all()
+
+    assert len(indexes) == 1
+    assert indexes[0]["series_id"] == "sensor_A"

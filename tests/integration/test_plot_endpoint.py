@@ -71,3 +71,17 @@ def test_plot_endpoint_returns_422_when_training_data_is_missing(client: TestCli
     payload = response.json()
     assert payload["error"] == "PLOT_DATA_UNAVAILABLE"
     assert "timestamp" in payload
+
+
+def test_plot_endpoint_supports_multi_day_timestamp_window(client: TestClient) -> None:
+    """Plot rendering should also work when training timestamps span multiple days."""
+    timestamps = [1_700_000_000 + (i * 86_400) for i in range(40)]
+    values = [10.0 + (0.5 * i) for i in range(40)]
+    trained = client.post("/fit/sensor_plot_days", json={"timestamps": timestamps, "values": values})
+    assert trained.status_code == 200
+
+    response = client.get("/plot", params={"series_id": "sensor_plot_days"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG")
