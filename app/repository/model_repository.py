@@ -6,6 +6,8 @@ from typing import Any
 
 import joblib
 
+from app.domain.exceptions import InvalidSeriesIdError
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,4 +105,4 @@ class ModelRepository:
         """Reject empty or unsafe series identifiers for filesystem paths."""
         invalid_tokens = ("/", "\\", "..", "\x00")
         if not series_id or any(token in series_id for token in invalid_tokens):
-            raise ValueError(f"Invalid series_id: '{series_id}'")
+            raise InvalidSeriesIdError(f"Invalid series_id: '{series_id}'")

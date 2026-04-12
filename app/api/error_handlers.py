@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.domain.exceptions import (
     ConstantSeriesError,
     DuplicateTimestampsError,
+    InvalidSeriesIdError,
     InsufficientDataError,
     InvalidValuesError,
     SeriesNotFoundError,
@@ -37,6 +38,7 @@ def _error_payload(error: str, message: str, detail: str | None = None) -> dict[
         "detail": detail,
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
+
 
 def register_error_handlers(app: FastAPI) -> None:
     """Register API-level exception handlers with normalized error responses."""
@@ -67,6 +69,15 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=400,
             content=_error_payload(error=error_code, message=str(exc)),
+        )
+
+    @app.exception_handler(InvalidSeriesIdError)
+    async def handle_invalid_series_id(_: Request, exc: InvalidSeriesIdError) -> JSONResponse:
+        """Translate invalid path series identifier into HTTP 400 response."""
+        logger.warning("Invalid series_id", extra={"error": str(exc)})
+        return JSONResponse(
+            status_code=400,
+            content=_error_payload(error="INVALID_SERIES_ID", message=str(exc)),
         )
 
     @app.exception_handler(RequestValidationError)

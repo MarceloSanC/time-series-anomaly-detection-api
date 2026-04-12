@@ -31,3 +31,7 @@ class SeriesNotFoundError(Exception):
 
 class VersionNotFoundError(Exception):
     """Raised when requested model version is missing for a series."""
+
+
+class InvalidSeriesIdError(ValueError):
+    """Raised when series_id is empty or unsafe for filesystem-backed storage."""

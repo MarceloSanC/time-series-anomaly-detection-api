@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from app.domain.exceptions import InvalidSeriesIdError
 from app.domain.models import AnomalyDetectionModel
 from app.domain.schemas import TimeSeries, DataPoint
 from app.repository.model_repository import ModelRepository
@@ -121,12 +122,20 @@ def test_list_all_returns_all_series_indexes(tmp_path: Path) -> None:
     assert series_ids == ["sensor_A", "sensor_B"]
 
 
-def test_invalid_series_id_is_rejected(tmp_path: Path) -> None:
-    """Reject invalid series identifiers that attempt path traversal."""
+@pytest.mark.parametrize(
+    "series_id",
+    [
+        "../escape",
+        r"sensor\\A",
+        "sensor\x00A",
+    ],
+)
+def test_invalid_series_id_is_rejected(tmp_path: Path, series_id: str) -> None:
+    """Reject empty or unsafe series identifiers used in filesystem paths."""
     repository = ModelRepository(storage_path=tmp_path)
 
-    with pytest.raises(ValueError):
-        repository.get_index("../escape")
+    with pytest.raises(InvalidSeriesIdError):
+        repository.get_index(series_id)
 
 
 def test_load_raises_file_not_found_for_missing_model(tmp_path: Path) -> None:

@@ -89,3 +89,16 @@ def test_predict_endpoint_returns_404_for_unknown_series(client: TestClient) -> 
     payload = response.json()
     assert payload["error"] == "SERIES_NOT_FOUND"
     assert "timestamp" in payload
+
+
+def test_predict_endpoint_rejects_invalid_series_id(client: TestClient) -> None:
+    """Unsafe series_id path segment must map to normalized 400 error payload."""
+    response = client.post(
+        "/predict/sensor..A",
+        json={"timestamp": "1700000300", "value": 5.0},
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["error"] == "INVALID_SERIES_ID"
+    assert "timestamp" in payload

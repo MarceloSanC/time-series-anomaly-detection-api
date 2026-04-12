@@ -39,3 +39,16 @@ def test_fit_endpoint_increments_version_on_retrain(client: TestClient) -> None:
     assert second.status_code == 200
     assert first.json()["version"] == "v1"
     assert second.json()["version"] == "v2"
+
+
+def test_fit_endpoint_rejects_invalid_series_id(client: TestClient) -> None:
+    """Unsafe series_id path segment must map to normalized 400 error payload."""
+    response = client.post(
+        "/fit/sensor..A",
+        json=_fit_payload(start_timestamp=1, start_value=1.0),
+    )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["error"] == "INVALID_SERIES_ID"
+    assert "timestamp" in payload
