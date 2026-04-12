@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-04-12T14:05:24.665506Z",
+  "target": {
+    "base_url": "http://localhost:8000",
+    "series_id": "sensor_benchmark",
+    "trained_version": "v1"
+  },
+  "workload": {
+    "n_train_points": 180,
+    "n_parallel_inference_requests": 100
+  },
+  "latency_ms": {
+    "p50": 258.2837740001196,
+    "p95": 293.7118849993112,
+    "p99": 297.37747570990905,
+    "avg": 227.04766309005208,
+    "min": 19.354385000042384,
+    "max": 298.00817599971197
+  },
+  "throughput_rps": 321.9633324012823,
+  "total_duration_seconds": 0.31059437499970954
+}
