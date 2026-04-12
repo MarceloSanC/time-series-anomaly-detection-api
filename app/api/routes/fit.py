@@ -19,6 +19,7 @@ class FitRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_lengths(self) -> "FitRequest":
+        """Validate non-empty aligned timestamp/value arrays."""
         if not self.timestamps:
             raise ValueError("timestamps and values cannot be empty")
         if len(self.timestamps) != len(self.values):
@@ -38,6 +39,7 @@ def fit_series(
     payload: FitRequest,
     model_service: ModelService = Depends(get_model_service),
 ) -> FitResponse:
+    """Train a model for the given `series_id` and return contract response."""
     logger.info("Fit request received", extra={"series_id": series_id})
 
     series = TimeSeries(

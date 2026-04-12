@@ -38,7 +38,6 @@ class ModelRepository:
             versions = [version]
         else:
             versions = list(current_index.get("versions", []))
-            # TODO(stage3): reject duplicate versions explicitly instead of silently continuing.
             if version not in versions:
                 versions.append(version)
 
