@@ -13,6 +13,7 @@ from app.domain.exceptions import (
     InvalidSeriesIdError,
     InsufficientDataError,
     InvalidValuesError,
+    PlotDataUnavailableError,
     SeriesNotFoundError,
     ValidationServiceError,
     VersionNotFoundError,
@@ -78,6 +79,15 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=400,
             content=_error_payload(error="INVALID_SERIES_ID", message=str(exc)),
+        )
+
+    @app.exception_handler(PlotDataUnavailableError)
+    async def handle_plot_data_unavailable(_: Request, exc: PlotDataUnavailableError) -> JSONResponse:
+        """Translate missing plot-ready metadata into HTTP 422 response."""
+        logger.warning("Plot data unavailable", extra={"error": str(exc)})
+        return JSONResponse(
+            status_code=422,
+            content=_error_payload(error="PLOT_DATA_UNAVAILABLE", message=str(exc)),
         )
 
     @app.exception_handler(RequestValidationError)

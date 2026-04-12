@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.exceptions import SeriesNotFoundError, VersionNotFoundError
+from app.domain.exceptions import PlotDataUnavailableError, SeriesNotFoundError, VersionNotFoundError
+from app.domain.models import AnomalyDetectionModel
 from app.domain.schemas import DataPoint, TimeSeries
 from app.repository.model_repository import ModelRepository
 from app.services.model_service import ModelService
@@ -156,3 +157,52 @@ def test_get_series_info_raises_series_not_found(tmp_path: Path) -> None:
 
     with pytest.raises(SeriesNotFoundError):
         service.get_series_info("missing")
+
+
+def test_get_plot_data_returns_training_points_for_latest_version(tmp_path: Path) -> None:
+    """Return plot-ready metadata including training points for latest version."""
+    repository = ModelRepository(storage_path=tmp_path)
+    service = ModelService(
+        repository=repository,
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+
+    service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
+    service.train(series_id="sensor_A", data=_series([2.0, 3.0, 4.0]))
+
+    plot_data = service.get_plot_data(series_id="sensor_A")
+
+    assert plot_data["series_id"] == "sensor_A"
+    assert plot_data["version"] == "v2"
+    assert isinstance(plot_data["training_data"], list)
+    assert len(plot_data["training_data"]) == 3
+
+
+def test_get_plot_data_raises_when_training_points_missing(tmp_path: Path) -> None:
+    """Raise PlotDataUnavailableError for legacy metadata without training_data."""
+    repository = ModelRepository(storage_path=tmp_path)
+    service = ModelService(
+        repository=repository,
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+
+    model = AnomalyDetectionModel().fit(_series([1.0, 2.0, 3.0]))
+    repository.save(
+        series_id="sensor_A",
+        version="v1",
+        model=model,
+        metadata={
+            "version": "v1",
+            "mean": 10.0,
+            "std": 1.0,
+            "n_samples": 3,
+            "trained_at": "2026-01-01T00:00:00Z",
+            "training_duration_ms": 0.1,
+            "data_range": {"min_timestamp": 1, "max_timestamp": 3},
+        },
+    )
+
+    with pytest.raises(PlotDataUnavailableError):
+        service.get_plot_data(series_id="sensor_A")
