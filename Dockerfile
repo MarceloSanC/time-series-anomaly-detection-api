@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -14,6 +14,17 @@ COPY app ./app
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir .
 
 RUN mkdir -p /app/storage && chown -R appuser:appgroup /app
+
+FROM base AS test
+
+COPY tests ./tests
+RUN pip install --no-cache-dir "pytest==8.2.0" "pytest-asyncio==0.23.0" "pytest-cov==5.0.0"
+
+USER appuser
+
+CMD ["pytest", "-v"]
+
+FROM base AS runtime
 
 USER appuser
 
