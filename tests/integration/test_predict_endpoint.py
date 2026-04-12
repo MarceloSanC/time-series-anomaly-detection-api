@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.dependencies import get_model_service
+
 
 def _fit_payload(start_timestamp: int, start_value: float) -> dict[str, list[float] | list[int]]:
     return {
@@ -102,3 +104,71 @@ def test_predict_endpoint_rejects_invalid_series_id(client: TestClient) -> None:
     payload = response.json()
     assert payload["error"] == "INVALID_SERIES_ID"
     assert "timestamp" in payload
+
+
+def test_predict_endpoint_returns_404_for_unknown_version(client: TestClient) -> None:
+    """Unknown explicit version should map to normalized VERSION_NOT_FOUND response."""
+    _train_baseline(client)
+
+    response = client.post(
+        "/predict/sensor_A?version=v999",
+        json={"timestamp": "1700000400", "value": 5.0},
+    )
+
+    assert response.status_code == 404
+    payload = response.json()
+    assert payload["error"] == "VERSION_NOT_FOUND"
+
+
+def test_predict_endpoint_rejects_non_numeric_timestamp(client: TestClient) -> None:
+    """Non-numeric timestamp string should trigger request validation handler."""
+    _train_baseline(client)
+
+    response = client.post(
+        "/predict/sensor_A",
+        json={"timestamp": "not-a-timestamp", "value": 5.0},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"] == "VALIDATION_ERROR"
+
+
+def test_predict_endpoint_rejects_blank_timestamp(client: TestClient) -> None:
+    """Blank timestamp should trigger request validation handler."""
+    _train_baseline(client)
+
+    response = client.post(
+        "/predict/sensor_A",
+        json={"timestamp": "   ", "value": 5.0},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"] == "VALIDATION_ERROR"
+
+
+def test_predict_endpoint_maps_unhandled_runtime_error_to_internal_error(client: TestClient) -> None:
+    """Unexpected service failure should return normalized INTERNAL_ERROR response."""
+
+    class BrokenService:
+        def predict(self, series_id: str, data_point: object, version: str | None = None) -> object:
+            _ = (series_id, data_point, version)
+            raise RuntimeError("boom")
+
+    client.app.dependency_overrides[get_model_service] = lambda: BrokenService()
+    try:
+        # In this scenario we intentionally trigger an internal exception and
+        # assert the normalized 500 payload from global error handlers.
+        # Use a client that does not re-raise server exceptions into the test process.
+        with TestClient(client.app, raise_server_exceptions=False) as internal_error_client:
+            response = internal_error_client.post(
+                "/predict/sensor_A",
+                json={"timestamp": "1700000500", "value": 5.0},
+            )
+    finally:
+        client.app.dependency_overrides.pop(get_model_service, None)
+
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload["error"] == "INTERNAL_ERROR"

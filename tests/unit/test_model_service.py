@@ -206,3 +206,54 @@ def test_get_plot_data_raises_when_training_points_missing(tmp_path: Path) -> No
 
     with pytest.raises(PlotDataUnavailableError):
         service.get_plot_data(series_id="sensor_A")
+
+
+def test_get_plot_data_raises_when_metadata_file_is_missing(tmp_path: Path) -> None:
+    """Raise PlotDataUnavailableError when metadata.json no longer exists."""
+    repository = ModelRepository(storage_path=tmp_path)
+    service = ModelService(
+        repository=repository,
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
+
+    metadata_path = tmp_path / "sensor_A" / "v1" / "metadata.json"
+    metadata_path.unlink()
+
+    with pytest.raises(PlotDataUnavailableError):
+        service.get_plot_data(series_id="sensor_A")
+
+
+def test_train_recovers_when_latest_version_label_is_malformed(tmp_path: Path) -> None:
+    """Fallback to v1 when previous index latest_version cannot be parsed."""
+    repository = ModelRepository(storage_path=tmp_path)
+    service = ModelService(
+        repository=repository,
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+
+    repository.save(
+        series_id="sensor_A",
+        version="vx",
+        model=AnomalyDetectionModel().fit(_series([1.0, 2.0, 3.0])),
+        metadata={
+            "version": "vx",
+            "mean": 2.0,
+            "std": 1.0,
+            "n_samples": 3,
+            "trained_at": "2026-01-01T00:00:00Z",
+            "training_duration_ms": 0.1,
+            "data_range": {"min_timestamp": 1, "max_timestamp": 3},
+            "training_data": [
+                {"timestamp": 1, "value": 1.0},
+                {"timestamp": 2, "value": 2.0},
+                {"timestamp": 3, "value": 3.0},
+            ],
+        },
+    )
+
+    retrained = service.train(series_id="sensor_A", data=_series([4.0, 5.0, 6.0]))
+
+    assert retrained.version == "v1"

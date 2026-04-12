@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.dependencies import get_model_service
+from app.domain.exceptions import ValidationServiceError
+
 
 def _fit_payload(start_timestamp: int, start_value: float) -> dict[str, list[float] | list[int]]:
     return {
@@ -52,3 +55,43 @@ def test_fit_endpoint_rejects_invalid_series_id(client: TestClient) -> None:
     payload = response.json()
     assert payload["error"] == "INVALID_SERIES_ID"
     assert "timestamp" in payload
+
+
+def test_fit_endpoint_rejects_empty_arrays_with_validation_error(client: TestClient) -> None:
+    """Empty timestamps/values should be normalized as request validation error."""
+    response = client.post("/fit/sensor_A", json={"timestamps": [], "values": []})
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"] == "VALIDATION_ERROR"
+
+
+def test_fit_endpoint_rejects_mismatched_arrays_with_validation_error(client: TestClient) -> None:
+    """Mismatched timestamps/values lengths should return normalized 422 payload."""
+    response = client.post("/fit/sensor_A", json={"timestamps": [1, 2], "values": [10.0]})
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"] == "VALIDATION_ERROR"
+
+
+def test_fit_endpoint_maps_unmapped_validation_service_error(client: TestClient) -> None:
+    """Unmapped ValidationServiceError should fallback to generic VALIDATION_ERROR."""
+
+    class BrokenService:
+        def train(self, series_id: str, data: object) -> object:
+            _ = (series_id, data)
+            raise ValidationServiceError("custom validation failure")
+
+    client.app.dependency_overrides[get_model_service] = lambda: BrokenService()
+    try:
+        response = client.post(
+            "/fit/sensor_A",
+            json=_fit_payload(start_timestamp=1, start_value=1.0),
+        )
+    finally:
+        client.app.dependency_overrides.pop(get_model_service, None)
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["error"] == "VALIDATION_ERROR"
