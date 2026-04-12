@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
     user: "${UID:-1000}:${GID:-1000}"
     env_file:
       - .env
@@ -11,3 +12,13 @@ services:
     volumes:
       - ./storage:/app/storage
     restart: unless-stopped
+
+  api-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    env_file:
+      - .env
+    profiles:
+      - test

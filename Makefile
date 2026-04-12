@@ -3,7 +3,7 @@ PIP ?= $(PYTHON) -m pip
 PYTEST ?= $(PYTHON) -m pytest
 UVICORN ?= $(PYTHON) -m uvicorn
 
-.PHONY: install test run lint docker-build docker-up
+.PHONY: install test run lint docker-build docker-up docker-test-build docker-test
 
 install:
 	$(PIP) install -e ".[dev]"
@@ -22,3 +22,9 @@ docker-build:
 
 docker-up:
 	docker compose up -d
+
+docker-test-build:
+	docker compose --profile test build api-tests
+
+docker-test:
+	docker compose --profile test run --rm api-tests
