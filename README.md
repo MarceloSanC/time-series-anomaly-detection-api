@@ -46,6 +46,14 @@ pip install -e ".[dev]"
 pytest -v
 ```
 
+Coverage quality gate:
+- minimum enforced coverage: `80%` (`--cov-fail-under=80`)
+- generate terminal + HTML report with:
+
+```bash
+make coverage
+```
+
 Optional container-only validation:
 
 ```bash
