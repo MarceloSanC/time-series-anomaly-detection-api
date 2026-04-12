@@ -35,3 +35,7 @@ class VersionNotFoundError(Exception):
 
 class InvalidSeriesIdError(ValueError):
     """Raised when series_id is empty or unsafe for filesystem-backed storage."""
+
+
+class PlotDataUnavailableError(Exception):
+    """Raised when required training points are missing for plot generation."""

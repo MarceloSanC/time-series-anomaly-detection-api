@@ -66,6 +66,15 @@ class ModelRepository:
         logger.info("Model loaded", extra={"series_id": series_id, "version": version})
         return model, metadata
 
+    def load_metadata(self, series_id: str, version: str) -> dict[str, Any]:
+        """Load metadata only for a given series/version pair."""
+        self._validate_series_id(series_id)
+        metadata_path = self.storage_path / series_id / version / "metadata.json"
+        if not metadata_path.exists():
+            logger.warning("Metadata not found", extra={"series_id": series_id, "version": version})
+            raise FileNotFoundError(f"Metadata not found for series_id='{series_id}' version='{version}'")
+        return json.loads(metadata_path.read_text(encoding="utf-8"))
+
     def get_index(self, series_id: str) -> dict[str, Any] | None:
         """Return series index content or None when series is unknown."""
         self._validate_series_id(series_id)

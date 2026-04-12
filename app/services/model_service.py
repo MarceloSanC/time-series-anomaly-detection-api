@@ -6,7 +6,7 @@ import logging
 from time import perf_counter
 from typing import Any, Protocol
 
-from app.domain.exceptions import SeriesNotFoundError, VersionNotFoundError
+from app.domain.exceptions import PlotDataUnavailableError, SeriesNotFoundError, VersionNotFoundError
 from app.domain.models import AnomalyDetectionModel
 from app.domain.schemas import DataPoint, ModelInfo, PredictionResponse, TimeSeries, TrainResponse
 from app.repository.model_repository import ModelRepository
@@ -67,6 +67,10 @@ class ModelService:
                     "min_timestamp": min(timestamps),
                     "max_timestamp": max(timestamps),
                 },
+                "training_data": [
+                    {"timestamp": point.timestamp, "value": point.value}
+                    for point in data.data
+                ],
             }
             self.repository.save(series_id=series_id, version=version, model=model, metadata=metadata)
             logger.info("Training completed", extra={"series_id": series_id, "version": version})
@@ -125,6 +129,28 @@ class ModelService:
             trained_at=metadata["trained_at"],
             n_samples=metadata["n_samples"],
         )
+
+    def get_plot_data(self, series_id: str, version: str | None = None) -> dict[str, Any]:
+        """Return metadata fields required to render training data visualization."""
+        resolved_version = self._resolve_version(series_id=series_id, version=version)
+        try:
+            metadata = self.repository.load_metadata(series_id=series_id, version=resolved_version)
+        except FileNotFoundError as exc:
+            raise PlotDataUnavailableError(
+                f"Plot metadata not available for series '{series_id}' version '{resolved_version}'"
+            ) from exc
+        training_data = metadata.get("training_data")
+        if not isinstance(training_data, list) or not training_data:
+            raise PlotDataUnavailableError(
+                f"Plot data not available for series '{series_id}' version '{resolved_version}'"
+            )
+        return {
+            "series_id": series_id,
+            "version": resolved_version,
+            "mean": metadata["mean"],
+            "std": metadata["std"],
+            "training_data": training_data,
+        }
 
     def _next_version(self, series_id: str) -> str:
         """Compute next incremental version label for a series."""

@@ -144,3 +144,19 @@ def test_load_raises_file_not_found_for_missing_model(tmp_path: Path) -> None:
 
     with pytest.raises(FileNotFoundError):
         repository.load(series_id="sensor_A", version="v1")
+
+
+def test_load_metadata_returns_metadata_without_loading_model(tmp_path: Path) -> None:
+    """Load only metadata for an existing series/version pair."""
+    repository = ModelRepository(storage_path=tmp_path)
+    repository.save(
+        series_id="sensor_A",
+        version="v1",
+        model=_fitted_model([1.0, 2.0, 3.0]),
+        metadata=_metadata("v1", 3),
+    )
+
+    metadata = repository.load_metadata(series_id="sensor_A", version="v1")
+
+    assert metadata["version"] == "v1"
+    assert metadata["n_samples"] == 3
