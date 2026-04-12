@@ -24,6 +24,7 @@ class HealthcheckResponse(BaseModel):
 
 
 def _aggregate_metrics(snapshot: dict[str, Any], prefix: str) -> HealthMetrics:
+    """Aggregate endpoint metrics into average and weighted p95 latency."""
     endpoints = snapshot.get("endpoints", {})
     if not isinstance(endpoints, dict):
         return HealthMetrics(avg=0.0, p95=0.0)
@@ -58,6 +59,7 @@ def healthcheck(
     model_service: ModelService = Depends(get_model_service),
     metrics_service: MetricsService = Depends(get_metrics_service),
 ) -> HealthcheckResponse:
+    """Return service-level readiness and latency metrics snapshot."""
     series_trained = len(model_service.list_series())
     snapshot = metrics_service.snapshot()
 

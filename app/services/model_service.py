@@ -4,7 +4,7 @@ from contextlib import nullcontext
 from datetime import UTC, datetime
 import logging
 from time import perf_counter
-from typing import Any, Protocol
+from typing import Any, ContextManager, Protocol
 
 from app.domain.exceptions import PlotDataUnavailableError, SeriesNotFoundError, VersionNotFoundError
 from app.domain.models import AnomalyDetectionModel
@@ -18,8 +18,7 @@ logger = logging.getLogger(__name__)
 class SupportsSeriesLock(Protocol):
     """Protocol for lock providers keyed by `series_id`."""
 
-    # TODO(stage3): tighten return type to ContextManager[Any] (or equivalent lock interface).
-    def get_lock(self, series_id: str) -> Any:
+    def get_lock(self, series_id: str) -> ContextManager[object]:
         ...
 
 
@@ -41,8 +40,6 @@ class ModelService:
         """Train and persist a new model version for a series."""
         self.validation_service.validate_training_data(data)
         lock_ctx = self.lock_manager.get_lock(series_id) if self.lock_manager is not None else nullcontext()
-        # TODO(stage3): optionally validate lock_ctx supports __enter__/__exit__ at runtime.
-        # TODO(stage3): evaluate enforcing threading.Lock-compatible lock objects in infra layer.
         logger.info("Training started", extra={"series_id": series_id})
 
         with lock_ctx:

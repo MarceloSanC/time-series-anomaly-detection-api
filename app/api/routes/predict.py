@@ -20,6 +20,7 @@ class PredictRequest(BaseModel):
     @field_validator("timestamp")
     @classmethod
     def validate_timestamp_string(cls, value: str) -> str:
+        """Accept only non-empty values coercible to unix-timestamp integer."""
         text = value.strip()
         try:
             int(text)
@@ -44,6 +45,7 @@ def predict_series(
     version: str | None = Query(default=None),
     model_service: ModelService = Depends(get_model_service),
 ) -> PredictResponse:
+    """Predict anomaly status for one point using latest or requested version."""
     logger.info("Predict request received", extra={"series_id": series_id, "version": version})
     timestamp = int(payload.timestamp)
 
