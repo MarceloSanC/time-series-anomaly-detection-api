@@ -143,6 +143,8 @@ Interpretation:
 ## Known Limitations
 
 - The baseline algorithm detects only positive anomalies (`value > mean + 3*std`).
+- Negative outliers are not flagged by design. Example: if `mean=100` and `std=5`, a value of `50`
+  (i.e. `mean - 10*std`) still returns `anomaly=false` in `/predict`.
 - Metrics are in-memory and reset on service restart.
 - Persistence is local filesystem (`storage/`), suitable for single-instance deployments.
 - `/plot` requires metadata that includes `training_data`; legacy models without it return `422 PLOT_DATA_UNAVAILABLE`.

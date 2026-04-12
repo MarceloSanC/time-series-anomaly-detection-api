@@ -88,11 +88,17 @@ class ModelService:
         model, _metadata = self.repository.load(series_id=series_id, version=resolved_version)
 
         is_anomaly = bool(model.predict(data_point))
+        upper_bound = float(model.mean + 3 * model.std)
+        lower_bound = float(model.mean - 3 * model.std)
         logger.info(
             "Prediction completed",
             extra={
                 "series_id": series_id,
                 "version": resolved_version,
+                "value": data_point.value,
+                "mean": float(model.mean),
+                "upper_bound": upper_bound,
+                "lower_bound": lower_bound,
                 "is_anomaly": is_anomaly,
             },
         )
@@ -103,7 +109,7 @@ class ModelService:
             value=data_point.value,
             timestamp=data_point.timestamp,
             mean=float(model.mean),
-            upper_bound=float(model.mean + 3 * model.std),
+            upper_bound=upper_bound,
         )
 
     def list_series(self) -> list[dict[str, Any]]:
