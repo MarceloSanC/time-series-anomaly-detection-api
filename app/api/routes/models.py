@@ -14,12 +14,16 @@ logger = logging.getLogger(__name__)
 
 @router.get("/models", response_model=list[ModelSummary])
 def list_models(
+    strict: bool = Query(
+        default=False,
+        description="When true, fail-fast if any series has incomplete latest metadata.",
+    ),
     model_service: ModelService = Depends(get_model_service),
 ) -> list[ModelSummary]:
     """List all tracked series with latest version and summary metadata."""
-    logger.info("Models list request received")
-    summaries = model_service.list_model_summaries()
-    logger.info("Models list request completed", extra={"series_count": len(summaries)})
+    logger.info("Models list request received", extra={"strict": strict})
+    summaries = model_service.list_model_summaries(strict=strict)
+    logger.info("Models list request completed", extra={"series_count": len(summaries), "strict": strict})
     return summaries
 
 
