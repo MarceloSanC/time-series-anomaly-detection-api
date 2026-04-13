@@ -8,7 +8,17 @@ from typing import Any, ContextManager, Protocol
 
 from app.domain.exceptions import PlotDataUnavailableError, SeriesNotFoundError, VersionNotFoundError
 from app.domain.models import AnomalyDetectionModel
-from app.domain.schemas import DataPoint, ModelInfo, PredictionResponse, TimeSeries, TrainResponse
+from app.domain.schemas import (
+    DataPoint,
+    DataQualityReport,
+    ModelDetail,
+    ModelInfo,
+    ModelSummary,
+    ModelVersionMetadata,
+    PredictionResponse,
+    TimeSeries,
+    TrainResponse,
+)
 from app.repository.model_repository import ModelRepository
 from app.services.validation_service import ValidationService
 
@@ -116,6 +126,30 @@ class ModelService:
         """List all tracked series index entries."""
         return self.repository.list_all()
 
+    def list_model_summaries(self) -> list[ModelSummary]:
+        """List all series with latest-version summary metadata."""
+        summaries: list[ModelSummary] = []
+        for index in self.repository.list_all():
+            series_id = str(index["series_id"])
+            latest_version = str(index["latest_version"])
+            try:
+                metadata = self.repository.load_metadata(series_id=series_id, version=latest_version)
+            except FileNotFoundError:
+                logger.warning(
+                    "Skipping series with missing latest metadata",
+                    extra={"series_id": series_id, "version": latest_version},
+                )
+                continue
+            summaries.append(
+                ModelSummary(
+                    series_id=series_id,
+                    latest_version=latest_version,
+                    n_samples=int(metadata["n_samples"]),
+                    trained_at=str(metadata["trained_at"]),
+                )
+            )
+        return summaries
+
     def get_series_info(self, series_id: str) -> ModelInfo:
         """Return metadata for the latest trained version of a series."""
         index = self.repository.get_index(series_id)
@@ -132,6 +166,42 @@ class ModelService:
             trained_at=metadata["trained_at"],
             n_samples=metadata["n_samples"],
         )
+
+    def get_model_detail(self, series_id: str) -> ModelDetail:
+        """Return detail payload for one series including derived data quality."""
+        info = self.get_series_info(series_id=series_id)
+        metadata = self.repository.load_metadata(series_id=series_id, version=info.latest_version)
+        quality = self._build_data_quality(metadata=metadata, n_samples=info.n_samples)
+        return ModelDetail(
+            series_id=info.series_id,
+            latest_version=info.latest_version,
+            versions=info.versions,
+            trained_at=info.trained_at,
+            n_samples=info.n_samples,
+            data_quality=quality,
+        )
+
+    def get_version_metadata(
+        self,
+        series_id: str,
+        version: str,
+        include_data: bool = False,
+    ) -> ModelVersionMetadata:
+        """Return metadata for one concrete model version of a series."""
+        resolved_version = self._resolve_version(series_id=series_id, version=version)
+        metadata = self.repository.load_metadata(series_id=series_id, version=resolved_version)
+        payload: dict[str, Any] = {
+            "version": resolved_version,
+            "mean": float(metadata["mean"]),
+            "std": float(metadata["std"]),
+            "n_samples": int(metadata["n_samples"]),
+            "trained_at": str(metadata["trained_at"]),
+            "training_duration_ms": float(metadata["training_duration_ms"]),
+            "data_range": metadata["data_range"],
+        }
+        if include_data:
+            payload["training_data"] = metadata.get("training_data", [])
+        return ModelVersionMetadata.model_validate(payload)
 
     def get_plot_data(self, series_id: str, version: str | None = None) -> dict[str, Any]:
         """Return metadata fields required to render training data visualization."""
@@ -182,3 +252,32 @@ class ModelService:
             raise VersionNotFoundError(f"Version '{version}' not found for series '{series_id}'")
 
         return version
+
+    @staticmethod
+    def _build_data_quality(metadata: dict[str, Any], n_samples: int) -> DataQualityReport:
+        """Derive deterministic quality indicators from persisted metadata."""
+        training_data = metadata.get("training_data", [])
+        values = [
+            float(point["value"])
+            for point in training_data
+            if isinstance(point, dict) and "value" in point
+        ]
+        mean = float(metadata["mean"])
+        min_value = min(values) if values else mean
+        max_value = max(values) if values else mean
+
+        data_range = metadata["data_range"]
+        min_ts = int(data_range["min_timestamp"])
+        max_ts = int(data_range["max_timestamp"])
+        time_span_seconds = max(max_ts - min_ts, 0)
+        points_per_second = float(n_samples / max(time_span_seconds, 1))
+
+        return DataQualityReport(
+            n_samples=n_samples,
+            mean=mean,
+            std=float(metadata["std"]),
+            min_value=min_value,
+            max_value=max_value,
+            time_span_seconds=time_span_seconds,
+            points_per_second=points_per_second,
+        )
