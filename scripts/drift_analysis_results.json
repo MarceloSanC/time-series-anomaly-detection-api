@@ -1,0 +1,56 @@
+{
+  "generated_at": "2026-04-13T19:58:54.818121Z",
+  "config": {
+    "sampling_hz": 1,
+    "training_hours": 2,
+    "evaluation_hours": 6,
+    "rolling_window": 300,
+    "instability_fpr_threshold": 0.05,
+    "random_seed": 42,
+    "base_mean": 50.0,
+    "base_std": 1.0,
+    "drift_start_hour": 1,
+    "drift_total_shift": 8.0,
+    "anomaly_probability": 0.005,
+    "anomaly_magnitude": 8.0
+  },
+  "workload": {
+    "training_points": 7200,
+    "evaluation_points": 21600
+  },
+  "detectors": {
+    "baseline": {
+      "fpr": 0.5231821990503678,
+      "alerts_per_hour": 1892.8333333333333,
+      "threshold_stability": {
+        "mean": 53.01066702775351,
+        "std": 0.0,
+        "min": 53.01066702775351,
+        "max": 53.01066702775351,
+        "range": 0.0
+      },
+      "time_to_instability_hours": 3.0
+    },
+    "rolling": {
+      "fpr": 0.00018620240201098595,
+      "alerts_per_hour": 20.333333333333332,
+      "threshold_stability": {
+        "mean": 56.78334557739888,
+        "std": 2.6009418613610573,
+        "min": 52.80759665244224,
+        "max": 62.05214322960258,
+        "range": 9.244546577160335
+      },
+      "time_to_instability_hours": null
+    }
+  },
+  "comparison": {
+    "fpr_relative_change_percent": 280875.00000000006,
+    "alerts_per_hour_delta": 1872.5
+  },
+  "artifacts": {
+    "timeseries_plot": "docs/assets/drift_analysis_timeseries.png",
+    "hourly_fpr_plot": "docs/assets/drift_analysis_fpr_hourly.png",
+    "one_sided_demo_plot": "docs/assets/drift_analysis_one_sided_demo.png"
+  }
+}
