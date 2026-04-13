@@ -114,6 +114,28 @@ curl "http://localhost:8000/plot?series_id=sensor_XYZ" --output plot.png
 curl "http://localhost:8000/plot?series_id=sensor_XYZ&version=v1" --output plot_v1.png
 ```
 
+Model introspection (additive extension):
+
+```bash
+# List tracked series (default tolerant mode)
+curl --fail-with-body -sS "http://localhost:8000/models"
+
+# Strict mode: fail-fast if any latest metadata is incomplete
+curl --fail-with-body -sS "http://localhost:8000/models?strict=true"
+
+# Series detail with derived data_quality
+curl --fail-with-body -sS "http://localhost:8000/models/sensor_XYZ"
+
+# Version metadata summary (training_data excluded by default)
+curl --fail-with-body -sS "http://localhost:8000/models/sensor_XYZ/versions/v1"
+
+# Version metadata including persisted training_data
+curl --fail-with-body -sS "http://localhost:8000/models/sensor_XYZ/versions/v1?include_data=true"
+```
+
+These `/models*` endpoints are additive introspection extensions and do not change
+the core OpenAPI-defined contracts for `/fit`, `/predict`, and `/healthcheck`.
+
 Example output:
 
 ![Plot endpoint example showing training points, mean line, and +/-3 sigma bounds](docs/assets/plot_example.png)
