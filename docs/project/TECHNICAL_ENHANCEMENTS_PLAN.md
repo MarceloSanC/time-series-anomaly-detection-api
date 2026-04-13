@@ -123,14 +123,24 @@ Data quality note:
      - `/models` with multiple series
      - `/models` tolerates incomplete metadata by default (`strict=false`) and still returns valid series
      - `/models?strict=true` returns `422 INCOMPLETE_MODEL_METADATA` when any latest metadata is missing/incomplete
+     - `/models?strict=true` fail-fast behavior: if one series is incomplete and another is valid, response must be `422` (no partial list payload)
      - `/models/{series_id}` success
      - `/models/{series_id}` unknown -> `404 SERIES_NOT_FOUND`
      - `/models/{series_id}/versions/{version}` success summary
      - `/models/{series_id}/versions/{version}?include_data=true` includes `training_data`
+     - `/models/{series_id}/versions/{version}?include_data=true` with legacy metadata missing `training_data` returns `training_data: []` (no 500)
+     - `/models/{series_id}/versions/{version}` must exclude `training_data` by default
      - `/models/{series_id}/versions/{version}` unknown version -> `404 VERSION_NOT_FOUND`
      - `/models/{series_id}` includes `data_quality` with expected fields and sane values
+     - `/models/{series_id}` validates `data_quality` calculations:
+       - `time_span_seconds` is non-negative
+       - `points_per_second` uses divisor `max(time_span_seconds, 1)`
+       - `min_value <= mean <= max_value` for monotonic training fixture
+     - `/models/{series_id}` with `min_timestamp == max_timestamp` yields `time_span_seconds == 0` and `points_per_second == n_samples/1`
    - Unit tests only for new helpers/mappers.
    - Suggested unit tests (new helper/mappers):
+     - `_build_data_quality` with normal metadata payload
+     - `_build_data_quality` with missing/empty `training_data` fallback behavior
      - `list_model_summaries(strict=True)` raises `MetadataIncompleteError` for missing metadata
      - `list_model_summaries(strict=False)` skips incomplete series and returns remaining summaries
 

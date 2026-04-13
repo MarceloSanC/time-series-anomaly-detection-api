@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.exceptions import PlotDataUnavailableError, SeriesNotFoundError, VersionNotFoundError
+from app.domain.exceptions import (
+    MetadataIncompleteError,
+    PlotDataUnavailableError,
+    SeriesNotFoundError,
+    VersionNotFoundError,
+)
 from app.domain.models import AnomalyDetectionModel
 from app.domain.schemas import DataPoint, TimeSeries
 from app.repository.model_repository import ModelRepository
@@ -257,3 +262,88 @@ def test_train_recovers_when_latest_version_label_is_malformed(tmp_path: Path) -
     retrained = service.train(series_id="sensor_A", data=_series([4.0, 5.0, 6.0]))
 
     assert retrained.version == "v1"
+
+
+def test_build_data_quality_with_normal_metadata_payload(tmp_path: Path) -> None:
+    """Compute expected data-quality indicators from regular metadata input."""
+    repository = ModelRepository(storage_path=tmp_path)
+    service = ModelService(
+        repository=repository,
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    metadata = {
+        "mean": 2.0,
+        "std": 1.0,
+        "data_range": {"min_timestamp": 10, "max_timestamp": 20},
+        "training_data": [
+            {"timestamp": 10, "value": 1.0},
+            {"timestamp": 15, "value": 2.0},
+            {"timestamp": 20, "value": 3.0},
+        ],
+    }
+
+    quality = service._build_data_quality(metadata=metadata, n_samples=3)  # noqa: SLF001
+
+    assert quality.n_samples == 3
+    assert quality.mean == 2.0
+    assert quality.std == 1.0
+    assert quality.min_value == 1.0
+    assert quality.max_value == 3.0
+    assert quality.time_span_seconds == 10
+    assert quality.points_per_second == 0.3
+
+
+def test_build_data_quality_falls_back_when_training_data_missing(tmp_path: Path) -> None:
+    """Fallback to mean bounds when metadata lacks training_data values."""
+    repository = ModelRepository(storage_path=tmp_path)
+    service = ModelService(
+        repository=repository,
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    metadata = {
+        "mean": 5.0,
+        "std": 2.0,
+        "data_range": {"min_timestamp": 100, "max_timestamp": 100},
+    }
+
+    quality = service._build_data_quality(metadata=metadata, n_samples=7)  # noqa: SLF001
+
+    assert quality.min_value == 5.0
+    assert quality.max_value == 5.0
+    assert quality.time_span_seconds == 0
+    assert quality.points_per_second == 7.0
+
+
+def test_list_model_summaries_strict_raises_for_missing_metadata(tmp_path: Path) -> None:
+    """Strict mode should raise when latest metadata file is missing."""
+    repository = ModelRepository(storage_path=tmp_path)
+    service = ModelService(
+        repository=repository,
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
+    (tmp_path / "sensor_A" / "v1" / "metadata.json").unlink()
+
+    with pytest.raises(MetadataIncompleteError):
+        service.list_model_summaries(strict=True)
+
+
+def test_list_model_summaries_non_strict_skips_incomplete_series(tmp_path: Path) -> None:
+    """Non-strict mode should skip incomplete series and return valid summaries."""
+    repository = ModelRepository(storage_path=tmp_path)
+    service = ModelService(
+        repository=repository,
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    service.train(series_id="sensor_ok", data=_series([1.0, 2.0, 3.0]))
+    service.train(series_id="sensor_bad", data=_series([4.0, 5.0, 6.0]))
+    (tmp_path / "sensor_bad" / "v1" / "metadata.json").unlink()
+
+    summaries = service.list_model_summaries(strict=False)
+
+    assert len(summaries) == 1
+    assert summaries[0].series_id == "sensor_ok"
