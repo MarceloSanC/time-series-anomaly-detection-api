@@ -50,6 +50,65 @@ class ModelInfo(BaseModel):
     n_samples: int
 
 
+class DataQualityReport(BaseModel):
+    """Derived training-data quality indicators for a model lineage."""
+
+    n_samples: int
+    mean: float
+    std: float
+    min_value: float
+    max_value: float
+    time_span_seconds: int
+    points_per_second: float
+
+
+class ModelSummary(BaseModel):
+    """Compact per-series summary used by the `/models` list endpoint."""
+
+    series_id: str
+    latest_version: str
+    n_samples: int
+    trained_at: str
+
+
+class ModelDetail(BaseModel):
+    """Detailed per-series payload used by the `/models/{series_id}` endpoint."""
+
+    series_id: str
+    latest_version: str
+    versions: list[str]
+    trained_at: str
+    n_samples: int
+    data_quality: DataQualityReport
+
+
+class DataRange(BaseModel):
+    """Timestamp range summary stored in metadata."""
+
+    min_timestamp: int
+    max_timestamp: int
+
+
+class MetadataTrainingPoint(BaseModel):
+    """Training sample representation persisted in model metadata."""
+
+    timestamp: int
+    value: float
+
+
+class ModelVersionMetadata(BaseModel):
+    """Version-level metadata response for model introspection endpoints."""
+
+    version: str
+    mean: float
+    std: float
+    n_samples: int
+    trained_at: str
+    training_duration_ms: float
+    data_range: DataRange
+    training_data: Optional[list[MetadataTrainingPoint]] = None
+
+
 class ErrorResponse(BaseModel):
     """Standardized error payload used by API error handlers."""
 
