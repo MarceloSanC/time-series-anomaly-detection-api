@@ -6,7 +6,12 @@ import logging
 from time import perf_counter
 from typing import Any, ContextManager, Protocol
 
-from app.domain.exceptions import PlotDataUnavailableError, SeriesNotFoundError, VersionNotFoundError
+from app.domain.exceptions import (
+    MetadataIncompleteError,
+    PlotDataUnavailableError,
+    SeriesNotFoundError,
+    VersionNotFoundError,
+)
 from app.domain.models import AnomalyDetectionModel
 from app.domain.schemas import (
     DataPoint,
@@ -126,8 +131,11 @@ class ModelService:
         """List all tracked series index entries."""
         return self.repository.list_all()
 
-    def list_model_summaries(self) -> list[ModelSummary]:
-        """List all series with latest-version summary metadata."""
+    def list_model_summaries(self, strict: bool = False) -> list[ModelSummary]:
+        """List all series with latest-version summary metadata.
+
+        When `strict=True`, missing metadata raises MetadataIncompleteError.
+        """
         summaries: list[ModelSummary] = []
         for index in self.repository.list_all():
             series_id = str(index["series_id"])
@@ -135,6 +143,10 @@ class ModelService:
             try:
                 metadata = self.repository.load_metadata(series_id=series_id, version=latest_version)
             except FileNotFoundError:
+                if strict:
+                    raise MetadataIncompleteError(
+                        f"Metadata missing for series '{series_id}' at latest version '{latest_version}'"
+                    )
                 logger.warning(
                     "Skipping series with missing latest metadata",
                     extra={"series_id": series_id, "version": latest_version},

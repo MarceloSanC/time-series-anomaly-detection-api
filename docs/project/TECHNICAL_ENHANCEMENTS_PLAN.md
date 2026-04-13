@@ -121,6 +121,8 @@ Data quality note:
    - Integration:
      - `/models` empty
      - `/models` with multiple series
+     - `/models` tolerates incomplete metadata by default (`strict=false`) and still returns valid series
+     - `/models?strict=true` returns `422 INCOMPLETE_MODEL_METADATA` when any latest metadata is missing/incomplete
      - `/models/{series_id}` success
      - `/models/{series_id}` unknown -> `404 SERIES_NOT_FOUND`
      - `/models/{series_id}/versions/{version}` success summary
@@ -128,6 +130,9 @@ Data quality note:
      - `/models/{series_id}/versions/{version}` unknown version -> `404 VERSION_NOT_FOUND`
      - `/models/{series_id}` includes `data_quality` with expected fields and sane values
    - Unit tests only for new helpers/mappers.
+   - Suggested unit tests (new helper/mappers):
+     - `list_model_summaries(strict=True)` raises `MetadataIncompleteError` for missing metadata
+     - `list_model_summaries(strict=False)` skips incomplete series and returns remaining summaries
 
 8. Documentation
    - Add `/models*` usage examples in `README.md`.

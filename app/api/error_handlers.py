@@ -13,6 +13,7 @@ from app.domain.exceptions import (
     InvalidSeriesIdError,
     InsufficientDataError,
     InvalidValuesError,
+    MetadataIncompleteError,
     PlotDataUnavailableError,
     SeriesNotFoundError,
     ValidationServiceError,
@@ -88,6 +89,15 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=422,
             content=_error_payload(error="PLOT_DATA_UNAVAILABLE", message=str(exc)),
+        )
+
+    @app.exception_handler(MetadataIncompleteError)
+    async def handle_metadata_incomplete(_: Request, exc: MetadataIncompleteError) -> JSONResponse:
+        """Translate incomplete metadata in introspection flow into HTTP 422 response."""
+        logger.warning("Incomplete model metadata", extra={"error": str(exc)})
+        return JSONResponse(
+            status_code=422,
+            content=_error_payload(error="INCOMPLETE_MODEL_METADATA", message=str(exc)),
         )
 
     @app.exception_handler(RequestValidationError)

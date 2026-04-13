@@ -39,3 +39,7 @@ class InvalidSeriesIdError(ValueError):
 
 class PlotDataUnavailableError(Exception):
     """Raised when required training points are missing for plot generation."""
+
+
+class MetadataIncompleteError(Exception):
+    """Raised when model metadata is missing/incomplete for introspection."""
