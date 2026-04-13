@@ -161,27 +161,161 @@ Data quality note:
 
 ---
 
-## STAGE B (P1) — Optional Follow-ups
+## STAGE B (P0) — Multi-Detector Extensibility (Isolation Forest)
 
-Use only after Stage A is complete.
+### Goal
 
-1. `P1` Request correlation improvements
-   - Add request-scoped summary logs for `/fit`, `/predict`, `/plot`, `/models*`.
-   - Ensure key model decision fields are always present in prediction logs.
+Enable multiple anomaly detectors in the same architecture while preserving backward compatibility with the default gaussian detector.
 
-2. `P1` Operational docs polish
-   - Add a short "Troubleshooting" section to README:
-     - missing metadata for plot
-     - known validation errors
-     - quick Docker test commands
+Rationale:
+- demonstrates true extensibility of the ML-serving architecture
+- enables model-family comparison per `series_id` without redesign
+- aligns with production MLE expectation of iterative detector evolution
 
-3. `P2` Observability export (lightweight)
-   - Add optional `/metrics` text endpoint (no external dependencies).
-   - Keep current `/healthcheck` unchanged.
+### Implementation Tasks (Ordered)
+
+1. Dependency and detector type definition
+   - Add `scikit-learn` to `pyproject.toml`.
+   - Define supported detector types (`gaussian`, `isolation_forest`) in a single source of truth.
+
+2. Domain model implementation
+   - Add `IsolationForestDetector` in `app/domain/models.py`.
+   - Keep interface parity with `AnomalyDetectionModel` (`fit`, `predict`).
+
+3. Service layer extension
+   - Extend `ModelService.train(...)` and `ModelService.predict(...)` with `detector` parameter.
+   - Preserve default `detector="gaussian"` when omitted.
+   - Ensure version resolution is scoped per `(series_id, detector)`.
+
+4. Repository storage evolution
+   - Update `app/repository/model_repository.py` layout:
+     - `storage/{series_id}/{detector}/{version}/model.joblib`
+     - `storage/{series_id}/{detector}/{version}/metadata.json`
+     - `storage/{series_id}/{detector}/index.json`
+   - Provide compatibility path/migration guard where necessary.
+
+5. API layer updates
+   - Add optional `?detector=` to:
+     - `POST /fit/{series_id}`
+     - `POST /predict/{series_id}`
+   - Validate unsupported detector values with normalized error response.
+
+6. Tests
+   - Unit tests for both detectors (`fit` and `predict` paths).
+   - Integration tests for:
+     - default gaussian behavior unchanged
+     - isolation forest train/predict success
+     - coexistence of both detectors under same `series_id`
+
+### Acceptance Criteria
+
+- `POST /fit/sensor_A?detector=isolation_forest` trains and persists.
+- `POST /predict/sensor_A?detector=isolation_forest` returns prediction.
+- `POST /fit/sensor_A` still uses gaussian by default.
+- Both detector families coexist for same `series_id` without interference.
+- `pytest -v` passes.
 
 ---
 
-## STAGE C (P1) — Structured ML Logging for Operability
+## STAGE C (P1) — Industrial Sensor Validation Extensions
+
+### Goal
+
+Add real-world sensor quality rules (flat line and temporal gap) to strengthen data validation for industrial time series.
+
+Rationale:
+- directly addresses common IoT failure modes
+- improves training-data quality and detector reliability
+- shows practical production awareness beyond toy validation rules
+
+### Implementation Tasks (Ordered)
+
+1. Config extensions
+   - Add in `app/config.py`:
+     - `FLAT_LINE_WINDOW` (default 10)
+     - `MAX_TEMPORAL_GAP_FACTOR` (default 2.0)
+
+2. Domain exceptions
+   - Add:
+     - `FlatLineDetectedError`
+     - `TemporalGapDetectedError`
+   - Both subclass `ValidationServiceError`.
+
+3. Validation service rules
+   - Update `app/services/validation_service.py` to add:
+     - rule: flat-line on trailing window
+     - rule: max interval > factor x median interval
+   - Keep fail-fast ordering deterministic.
+
+4. Error handler mappings
+   - Map new exceptions in `app/api/error_handlers.py` with codes:
+     - `FLAT_LINE_DETECTED`
+     - `TEMPORAL_GAP_DETECTED`
+
+5. Tests
+   - Add unit tests in `tests/unit/test_validation_service.py`:
+     - one passing + one rejecting case per new rule
+   - Validate configurability through injected config values.
+
+### Acceptance Criteria
+
+- Flat-line trailing windows are rejected with `FLAT_LINE_DETECTED`.
+- Temporal gaps beyond configured factor are rejected with `TEMPORAL_GAP_DETECTED`.
+- Both thresholds configurable through environment/config.
+- `pytest -v` passes.
+
+---
+
+## STAGE D (P1) — Detector Comparison Benchmark Script
+
+### Goal
+
+Provide a reproducible script to compare gaussian vs isolation forest detector behavior on the same dataset.
+
+Rationale:
+- demonstrates model validation discipline before production promotion
+- converts architecture extensibility into measurable tradeoff analysis
+- provides clear evidence for detector selection decisions
+
+### Implementation Tasks (Ordered)
+
+1. Script implementation
+   - Create `scripts/compare_detectors.py`.
+   - Build/generate realistic synthetic industrial dataset.
+   - Train both detectors on same train split.
+   - Evaluate on held-out split with injected anomalies.
+
+2. Metrics and timing
+   - Compute per detector:
+     - true positive rate
+     - false positive rate
+     - inference latency (`p50`, `p95`, `p99`)
+   - Add short conclusion field summarizing tradeoffs.
+
+3. Artifact output
+   - Save results to `scripts/detector_comparison.json`.
+   - Print JSON summary to stdout for quick review.
+
+4. Documentation integration
+   - Reference results in:
+     - `docs/project/MODELING_NOTES.md`
+     - `README.md`
+
+### Acceptance Criteria
+
+- Script runs end-to-end without errors.
+- Output JSON includes both detectors and all required metrics.
+- Results are referenced in `MODELING_NOTES.md` and `README.md`.
+
+### Validation Commands
+
+```bash
+.venv/bin/python scripts/compare_detectors.py
+```
+
+---
+
+## STAGE E (P1) — Structured ML Logging for Operability
 
 ### Goal
 
@@ -222,6 +356,9 @@ Rationale:
      - how to switch `LOG_FORMAT`
      - sample JSON log line
      - recommended fields for filtering in external log platforms
+   - Add request-scoped summary logging checklist for:
+     - `/fit`, `/predict`, `/plot`, `/models*`
+   - Ensure prediction logs always include key decision fields.
 
 ### Acceptance Criteria
 
@@ -242,7 +379,7 @@ LOG_FORMAT=json .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ---
 
-## STAGE D (P1) — Coverage Quality Gate and Developer UX
+## STAGE F (P1) — Coverage Quality Gate and Developer UX
 
 ### Goal
 
@@ -286,7 +423,7 @@ pytest -v
 
 ---
 
-## STAGE E (P1) — Quality Tooling and Makefile Ergonomics
+## STAGE G (P1) — Quality Tooling and Makefile Ergonomics
 
 ### Goal
 
@@ -317,6 +454,10 @@ Rationale:
 
 4. Documentation
    - Add "Common Make Targets" section in `README.md` with brief usage examples.
+   - Add short "Troubleshooting" section in `README.md`:
+     - missing metadata for plot
+     - known validation errors
+     - quick Docker test commands
 
 ### Acceptance Criteria
 
