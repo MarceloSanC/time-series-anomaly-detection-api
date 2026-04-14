@@ -4,7 +4,7 @@ This document records every significant architectural decision made for this pro
 the alternatives considered, and the reasoning behind each choice.
 GPT-codex and Claude must read this before proposing changes to any architectural pattern.
 For model-focused failure analysis and detector evolution paths, see
-`docs/project/MODELING_NOTES.md`.
+`docs/project/MODEL_DESIGN_NOTES.md`.
 
 ---
 
