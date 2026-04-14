@@ -61,3 +61,10 @@ Response (`200`):
 Notas:
 - O contrato define os blocos de latencia para inferencia e treino.
 - Campos operacionais internos adicionais podem existir internamente, mas o response HTTP deve seguir o OpenAPI.
+
+## Validation Error Codes
+
+Os codigos abaixo sao retornados exclusivamente por `POST /fit/{series_id}` no payload padronizado de erro de validacao (`400`):
+
+- `FLAT_LINE_DETECTED`: janela final da serie contem valores identicos (possivel sensor desconectado). Ativo apenas quando `FLAT_LINE_ENABLED=true`.
+- `TEMPORAL_GAP_DETECTED`: intervalo maximo entre timestamps excede o fator configurado sobre o intervalo mediano. Ativo apenas quando `TEMPORAL_GAP_ENABLED=true`.

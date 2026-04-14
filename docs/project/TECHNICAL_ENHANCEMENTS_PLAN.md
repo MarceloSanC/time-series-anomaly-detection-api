@@ -272,35 +272,50 @@ Rationale:
    - `validate_training_data` signature and return type remain unchanged (`-> None`).
    - No changes to `ModelService`, `fit.py`, or `openapi_spec.yaml`.
 
-5. Tests
-   - Add to `tests/unit/test_validation_service.py`:
-     - flat-line: one passing case (trailing window not flat), one rejection case
-       (trailing `flat_line_window` values identical, total series std above threshold)
-     - temporal-gap: one passing case (uniform intervals), one rejection case
-       (one gap > `max_temporal_gap_factor × np.median(intervals)`)
-   - Inject thresholds via `ValidationService(...)` constructor — same pattern
-     as existing tests; no config patching required.
+5. Enable/disable flags
+   - Add to `app/config.py`:
+     - `flat_line_enabled: bool` (default `False`)
+     - `temporal_gap_enabled: bool` (default `False`)
+   - Extend `ValidationService.__init__` with:
+     - `flat_line_enabled: bool | None = None`
+     - `temporal_gap_enabled: bool | None = None`
+   - Both default to `settings` values, matching the existing constructor pattern.
+   - Add opt-in guard at the start of each rule in `validate_training_data`:
+     - Rule 6 runs only if `self.flat_line_enabled` is `True`.
+     - Rule 7 runs only if `self.temporal_gap_enabled` is `True`.
+   - Update `.env.example` with the two new fields under the existing threshold block.
 
-6. Documentation updates
-   - Update `.env.example` with the two new config fields and their defaults.
+6. Tests
+   - Add to `tests/unit/test_validation_service.py`:
+     - flat-line disabled (`flat_line_enabled=False`): triggering series passes without rejection
+     - flat-line enabled (`flat_line_enabled=True`): one passing case (trailing window not flat),
+       one rejection case (trailing `flat_line_window` values identical, total series std above threshold)
+     - temporal-gap disabled (`temporal_gap_enabled=False`): triggering series passes without rejection
+     - temporal-gap enabled (`temporal_gap_enabled=True`): one passing case (uniform intervals),
+       one rejection case (one gap > `max_temporal_gap_factor × np.median(intervals)`)
+   - Inject all parameters via `ValidationService(...)` constructor — no config patching required.
+
+7. Documentation updates
    - Update `docs/project/API_RESPONSES.md` with:
      - `FLAT_LINE_DETECTED`
      - `TEMPORAL_GAP_DETECTED`
-   - Add two-line note in `README.md` under the validation section referencing
-     the new rules and their configurable thresholds.
+   - Add note in `README.md` under the validation section: rules are opt-in via config,
+     disabled by default, with configurable thresholds.
 
-7. Add `ValidationService` extension points section to `docs/project/ARCHITECTURE.md`.
+8. Add `ValidationService` extension points section to `docs/project/ARCHITECTURE.md`.
 
 ### Acceptance Criteria
 
 - Scope is explicit: this stage touches only the training (`/fit`) validation path.
 - `POST /fit` contract (request, response, status codes) is unchanged.
-- Series with `flat_line_window` or more identical trailing values is rejected
+- Both rules are **disabled by default** (`flat_line_enabled=False`, `temporal_gap_enabled=False`).
+- When enabled, series with `flat_line_window` or more identical trailing values is rejected
   with `400 FLAT_LINE_DETECTED`.
-- Series with a gap exceeding `max_temporal_gap_factor × median interval` is
+- When enabled, series with a gap exceeding `max_temporal_gap_factor × median interval` is
   rejected with `400 TEMPORAL_GAP_DETECTED`.
-- Both thresholds are configurable via `.env` / `config.py`.
-- `ValidationService.__init__` accepts both new thresholds as optional overrides
+- All four parameters (`flat_line_window`, `max_temporal_gap_factor`, `flat_line_enabled`,
+  `temporal_gap_enabled`) are configurable via `.env` / `config.py`.
+- `ValidationService.__init__` accepts all four as optional overrides
   (consistent with existing constructor pattern).
 - No changes to `ModelService`, `fit.py`, `openapi_spec.yaml`, or any other
   route or schema file.

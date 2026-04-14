@@ -179,6 +179,12 @@ Interpretation:
 - Persistence is local filesystem (`storage/`), suitable for single-instance deployments.
 - `/plot` requires metadata that includes `training_data`; legacy models without it return `422 PLOT_DATA_UNAVAILABLE`.
 
+## Training Validation Extensions
+
+- Flat-line and temporal-gap rules are opt-in via config and disabled by default.
+- Thresholds are configurable via `FLAT_LINE_WINDOW` and `MAX_TEMPORAL_GAP_FACTOR`.
+- Enable flags are configured with `FLAT_LINE_ENABLED` and `TEMPORAL_GAP_ENABLED`.
+
 ## Architecture Decisions (Brief)
 
 - Persistence uses local filesystem artifacts (`joblib` + `metadata.json`) under `storage/{series_id}/{version}`.

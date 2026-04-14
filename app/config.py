@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     min_data_points: int = Field(default=30)
     std_threshold: float = Field(default=1e-10)
+    flat_line_window: int = Field(default=10)
+    max_temporal_gap_factor: float = Field(default=2.0)
+    flat_line_enabled: bool = Field(default=False)
+    temporal_gap_enabled: bool = Field(default=False)
 
     latency_window_size: int = Field(default=1000, validation_alias="MAX_LATENCY_SAMPLES")
 
