@@ -17,9 +17,9 @@ from app.domain.exceptions import (
     MetadataIncompleteError,
     PlotDataUnavailableError,
     SeriesNotFoundError,
+    TemporalGapDetectedError,
     ValidationServiceError,
     VersionNotFoundError,
-    TemporalGapDetectedError,
     UnorderedTimestampsError,
 )
 
