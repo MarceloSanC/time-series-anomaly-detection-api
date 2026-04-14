@@ -161,72 +161,28 @@ Data quality note:
 
 ---
 
-## STAGE B (P0) — Multi-Detector Extensibility (Isolation Forest)
+## STANDALONE PROGRAM — Scalability and Multi-Detector Refactor
 
-### Goal
+This scope moved to a dedicated implementation document:
+`docs/project/SCALABILITY_REFACTOR_PLAN.md`
 
-Enable multiple anomaly detectors in the same architecture while preserving backward compatibility with the default gaussian detector.
-
-Rationale:
-- demonstrates true extensibility of the ML-serving architecture
-- enables model-family comparison per `series_id` without redesign
-- aligns with production MLE expectation of iterative detector evolution
-
-### Implementation Tasks (Ordered)
-
-1. Dependency and detector type definition
-   - Add `scikit-learn` to `pyproject.toml`.
-   - Define supported detector types (`gaussian`, `isolation_forest`) in a single source of truth.
-
-2. Domain model implementation
-   - Add `IsolationForestDetector` in `app/domain/models.py`.
-   - Keep interface parity with `AnomalyDetectionModel` (`fit`, `predict`).
-
-3. Service layer extension
-   - Extend `ModelService.train(...)` and `ModelService.predict(...)` with `detector` parameter.
-   - Preserve default `detector="gaussian"` when omitted.
-   - Ensure version resolution is scoped per `(series_id, detector)`.
-
-4. Repository storage evolution
-   - Update `app/repository/model_repository.py` layout:
-     - `storage/{series_id}/{detector}/{version}/model.joblib`
-     - `storage/{series_id}/{detector}/{version}/metadata.json`
-     - `storage/{series_id}/{detector}/index.json`
-   - Provide compatibility path/migration guard where necessary.
-
-5. API layer updates
-   - Add optional `?detector=` to:
-     - `POST /fit/{series_id}`
-     - `POST /predict/{series_id}`
-   - Validate unsupported detector values with normalized error response.
-
-6. Tests
-   - Unit tests for both detectors (`fit` and `predict` paths).
-   - Integration tests for:
-     - default gaussian behavior unchanged
-     - isolation forest train/predict success
-     - coexistence of both detectors under same `series_id`
-
-### Acceptance Criteria
-
-- `POST /fit/sensor_A?detector=isolation_forest` trains and persists.
-- `POST /predict/sensor_A?detector=isolation_forest` returns prediction.
-- `POST /fit/sensor_A` still uses gaussian by default.
-- Both detector families coexist for same `series_id` without interference.
-- `pytest -v` passes.
+Reason:
+- cross-cutting architectural impact (domain/services/repository/api/migration)
+- better tracked as an independent rollout program than a single roadmap stage
 
 ---
 
-## STAGE C (P1) — Industrial Sensor Validation Extensions
+## STAGE B (P1) — Industrial Sensor Validation Extensions
 
 ### Goal
 
-Add real-world sensor quality rules (flat line and temporal gap) to strengthen data validation for industrial time series.
+Add real-world sensor quality rules (flat line and temporal gap) to strengthen data validation for industrial time series in the training path.
 
 Rationale:
 - directly addresses common IoT failure modes
 - improves training-data quality and detector reliability
 - shows practical production awareness beyond toy validation rules
+- keeps inference path (`/predict`) lightweight and unaffected by training-only quality gates
 
 ### Implementation Tasks (Ordered)
 
@@ -234,6 +190,9 @@ Rationale:
    - Add in `app/config.py`:
      - `FLAT_LINE_WINDOW` (default 10)
      - `MAX_TEMPORAL_GAP_FACTOR` (default 2.0)
+   - Add rule mode defaults in `app/config.py` (all default `off`):
+     - `FLAT_LINE_MODE=off|warn|error`
+     - `TEMPORAL_GAP_MODE=off|warn|error`
 
 2. Domain exceptions
    - Add:
@@ -246,27 +205,109 @@ Rationale:
      - rule: flat-line on trailing window
      - rule: max interval > factor x median interval
    - Keep fail-fast ordering deterministic.
+   - Apply these rules only during `/fit` (training validation path), not `/predict`.
+   - Define explicit config contract before implementation:
+     - `RuleMode` enum: `off|warn|error`
+     - `RuleConfig` typed contract (dataclass/TypedDict) with:
+       - `flat_line_mode: RuleMode`
+       - `temporal_gap_mode: RuleMode`
+   - Support per-request optional rule-mode overrides (default `off`) by building `RuleConfig` in the route handler and passing it into service:
+     - `ValidationService.validate_training_data(data, rule_config)`
+   - Define a scalable rule-evaluation contract to support future rules without route rewrites:
+     - shared enum-like mode: `off|warn|error`
+     - shared evaluator return type for warnings:
+       - `ValidationWarning` typed contract with `rule_id`, `mode`, `message`
+     - centralized rule registry/list executed by validation service
+     - each rule consults `RuleConfig` and either:
+       - skips (`off`)
+       - emits typed warning (`warn`)
+       - raises typed exception (`error`)
 
 4. Error handler mappings
    - Map new exceptions in `app/api/error_handlers.py` with codes:
      - `FLAT_LINE_DETECTED`
      - `TEMPORAL_GAP_DETECTED`
+   - Errors are emitted only when the effective mode for the triggered rule is `error`.
 
-5. Tests
+5. API contract updates (training endpoint)
+   - Extend `POST /fit/{series_id}` request with optional **query params** (default `off`), one per rule:
+     - `flat_line_mode: off|warn|error`
+     - `temporal_gap_mode: off|warn|error`
+   - Keep backward compatibility when params are omitted.
+   - Precedence rule (explicit):
+     - request query override > environment/config default > hardcoded fallback
+   - Invalid mode handling (explicit):
+     - any mode value outside `off|warn|error` returns `422`
+     - normalized error code: `INVALID_VALIDATION_MODE`
+     - message must include accepted values
+   - `warn` mode behavior:
+     - request succeeds normally (no 4xx)
+     - warnings are emitted in logs with required fields:
+       - `event=training_validation_warning`
+       - `rule_id`
+       - `mode`
+       - `series_id`
+       - `request_id`
+       - `message`
+     - warnings are also returned in API response via additive optional field:
+       - `warnings: list[ValidationWarning]` (optional)
+     - required fields in base response contract remain unchanged
+   - Canonical usage example:
+     - `POST /fit/sensor_A?flat_line_mode=warn&temporal_gap_mode=error`
+
+6. Tests
    - Add unit tests in `tests/unit/test_validation_service.py`:
      - one passing + one rejecting case per new rule
+     - mode behavior per rule (`off`, `warn`, `error`)
+   - Add integration tests for `/fit`:
+     - default `off` does not reject due to new rules
+     - `warn` does not reject request, logs warning, and returns `warnings` payload
+     - `error` rejects with normalized code
    - Validate configurability through injected config values.
+   - Validate per-request override precedence over config defaults.
+   - Validate `/fit` query-parameter parsing for mode values and invalid-mode rejection.
+
+7. Rule taxonomy for future extensibility
+   - Define stable rule identifiers:
+     - `flat_line`
+     - `temporal_gap`
+   - Define standard rule config keys:
+     - `<RULE_ID>_mode`
+     - rule-specific thresholds (e.g. `flat_line_window`, `max_temporal_gap_factor`)
+   - Define stable typed warning/error payload attributes for future rules:
+     - `rule_id`
+     - `mode`
+     - `message`
+     - `error_code` (for `error` mode)
+   - Treat this taxonomy as code-level contract (enum + typed class), not naming convention only.
+
+8. Documentation updates (required)
+   - Update `README.md` with mode-query examples for `/fit`.
+   - Update `docs/project/API_RESPONSES.md` with:
+     - `INVALID_VALIDATION_MODE`
+     - `FLAT_LINE_DETECTED`
+     - `TEMPORAL_GAP_DETECTED`
+   - Update `docs/context/openapi_spec.yaml` as additive extension, or add explicit note if OpenAPI base contract is intentionally kept unchanged.
 
 ### Acceptance Criteria
 
-- Flat-line trailing windows are rejected with `FLAT_LINE_DETECTED`.
-- Temporal gaps beyond configured factor are rejected with `TEMPORAL_GAP_DETECTED`.
-- Both thresholds configurable through environment/config.
+- Scope is explicit: this stage affects only training (`/fit`) validation.
+- New rule modes are optional request parameters on `/fit`, default `off`.
+- Flat-line and temporal-gap rules support `off|warn|error` independently.
+- In `error` mode:
+  - flat-line trailing windows are rejected with `FLAT_LINE_DETECTED`
+  - temporal gaps beyond configured factor are rejected with `TEMPORAL_GAP_DETECTED`
+- In `warn` mode, requests succeed and warnings are logged.
+- In `warn` mode, requests succeed, warnings are logged, and warnings are returned in optional response field.
+- In `off` mode, rule is skipped.
+- Thresholds and default modes are configurable through environment/config.
+- Validation architecture supports adding future rules via shared mode contract/registry pattern.
+- `RuleMode`, `RuleConfig`, and `ValidationWarning` are implemented as typed code contracts.
 - `pytest -v` passes.
 
 ---
 
-## STAGE D (P1) — Detector Comparison Benchmark Script
+## STAGE C (P1) — Detector Comparison Benchmark Script
 
 ### Goal
 
@@ -315,7 +356,7 @@ Rationale:
 
 ---
 
-## STAGE E (P1) — Structured ML Logging for Operability
+## STAGE D (P1) — Structured ML Logging for Operability
 
 ### Goal
 
@@ -379,7 +420,7 @@ LOG_FORMAT=json .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ---
 
-## STAGE F (P1) — Coverage Quality Gate and Developer UX
+## STAGE E (P1) — Coverage Quality Gate and Developer UX
 
 ### Goal
 
@@ -423,7 +464,7 @@ pytest -v
 
 ---
 
-## STAGE G (P1) — Quality Tooling and Makefile Ergonomics
+## STAGE F (P1) — Quality Tooling and Makefile Ergonomics
 
 ### Goal
 
