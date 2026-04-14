@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.domain.exceptions import (
     ConstantSeriesError,
     DuplicateTimestampsError,
+    FlatLineDetectedError,
     InvalidSeriesIdError,
     InsufficientDataError,
     InvalidValuesError,
@@ -18,6 +19,7 @@ from app.domain.exceptions import (
     SeriesNotFoundError,
     ValidationServiceError,
     VersionNotFoundError,
+    TemporalGapDetectedError,
     UnorderedTimestampsError,
 )
 
@@ -29,6 +31,8 @@ VALIDATION_ERROR_CODE_MAP: dict[type[ValidationServiceError], str] = {
     DuplicateTimestampsError: "DUPLICATE_TIMESTAMPS",
     UnorderedTimestampsError: "UNORDERED_TIMESTAMPS",
     InvalidValuesError: "INVALID_VALUES",
+    FlatLineDetectedError: "FLAT_LINE_DETECTED",
+    TemporalGapDetectedError: "TEMPORAL_GAP_DETECTED",
 }
 
 
