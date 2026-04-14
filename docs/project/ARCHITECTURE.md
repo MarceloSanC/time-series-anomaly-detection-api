@@ -158,6 +158,12 @@ def write_index_atomically(index_path: Path, data: dict) -> None:
 
 ---
 
+## ARCHITECTURE EXTENSIONS (Post-Challenge Scope)
+
+> Section 11 is implemented as Stage C. Section 12 describes a planned modularization path.
+
+---
+
 ## 11. VALIDATION SERVICE: extension points and design boundaries
 
 **Decision:** `ValidationService` uses an imperative fail-fast chain of seven rules (five core + two optional sensor-quality rules). New rules require exactly two changes: a typed exception subclassing `ValidationServiceError` in `app/domain/exceptions.py`, and one entry in `VALIDATION_ERROR_CODE_MAP` in `app/api/error_handlers.py`. No handler functions, route handlers, or service signatures change.
@@ -165,6 +171,16 @@ def write_index_atomically(index_path: Path, data: dict) -> None:
 **Why opt-in flags instead of always-on:** The sensor-quality rules (flat-line, temporal-gap) target industrial IoT failure modes outside the original challenge scope. Defaulting them to active would reject valid evaluator data. Boolean flags in `config.py` keep the feature demonstrable without side effects; all thresholds and flags are injectable via the constructor for test isolation.
 
 **Modularization path:** If the sensor data quality rules grow beyond the current scope, `ValidationService` would be split into a dedicated `SensorDataQualityValidator` module. See Section 12 for the production context and domain motivation behind this boundary.
+
+---
+
+## 12. SENSOR DATA QUALITY: production context for industrial deployments
+
+**Decision:** The flat-line and temporal-gap validation rules are derived from real failure modes in industrial IoT sensor networks. Flat-line patterns indicate frozen sensors or disconnected signal paths; irregular temporal gaps indicate sampling instability or upstream pipeline failures. Both produce structurally valid data (numeric, finite, ordered) that yields unreliable models.
+
+**Why opt-in and not always-on:** These rules are outside the original challenge scope and target a specific deployment context. Always-on defaults would silently reject training data that is valid in non-industrial settings. See Section 11 for the flag mechanism.
+
+**Modularization trigger:** If sensor-quality rules exceed 3–4 rules, `ValidationService` should be split: a dedicated `SensorDataQualityValidator` handles domain-specific quality checks while `ValidationService` retains only structural integrity rules. The `TimeSeries` interface is the stable contract between them — no architectural rewrites required.
 
 ---
 

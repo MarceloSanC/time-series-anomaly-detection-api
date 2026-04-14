@@ -27,6 +27,8 @@ Constraints:
 
 ## STAGE A (P0) — Model Introspection Endpoints
 
+Status: Completed
+
 ### Goal
 
 Expose model inventory and per-series metadata through API introspection:
@@ -158,6 +160,11 @@ Data quality note:
 - Unknown version returns normalized `VERSION_NOT_FOUND`.
 - Core endpoint contracts remain unchanged.
 - `pytest -v` passes.
+
+### Validation Evidence
+
+- `/models`, `/models/{series_id}` e `/models/{series_id}/versions/{version}` implementados e cobertos por testes de integracao.
+- Casos de erro normalizados validados (`SERIES_NOT_FOUND`, `VERSION_NOT_FOUND`, `INCOMPLETE_MODEL_METADATA` em `strict=true`).
 
 ---
 
@@ -438,6 +445,8 @@ LOG_FORMAT=json .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## STAGE F (P1) — Coverage Quality Gate and Developer UX
 
+Status: Completed
+
 ### Goal
 
 Introduce a minimum automated coverage gate and an easy local coverage command.
@@ -478,6 +487,11 @@ make coverage
 pytest -v
 ```
 
+### Validation Evidence
+
+- `make coverage`: `Required test coverage of 80% reached. Total coverage: 99.73%`
+- Test summary: `81 passed, 15 warnings in 5.64s`
+
 ---
 
 ## STAGE G (P1) — Quality Tooling and Makefile Ergonomics
@@ -496,6 +510,7 @@ Rationale:
 1. Add Ruff as dev dependency
    - Update `pyproject.toml` optional dev dependencies with `ruff`.
    - Add minimal Ruff config under `[tool.ruff]` / `[tool.ruff.lint]`.
+   - Keep lint scope minimal in this stage: default Ruff rule families `E` and `F` only.
 
 2. Makefile target hardening
    - Keep existing stable targets (`install`, `test`, `docker-up`, `docker-test`).
@@ -503,11 +518,11 @@ Rationale:
      - `docker-down` (`docker compose down -v`)
      - `benchmark` (`.venv/bin/python scripts/benchmark.py`)
      - `smoke` (`./scripts/manual/stage2_smoke_test.sh`)
-     - `check` (aggregates lint + test + coverage where applicable)
+     - `check` with exact command chain: `make lint && make test`
 
 3. Lint integration
    - Update `lint` target to use Ruff (`ruff check app tests`).
-   - Optionally add `format-check` target using Ruff formatter in check mode.
+   - Keep `format-check` out of scope for this stage (evaluate later in a separate follow-up).
 
 4. Documentation
    - Add "Common Make Targets" section in `README.md` with brief usage examples.
@@ -520,7 +535,7 @@ Rationale:
 
 - `make lint` runs with Ruff and exits cleanly.
 - `make docker-down`, `make benchmark`, and `make smoke` run without command errors.
-- `make check` provides a reliable pre-PR gate.
+- `make check` runs `make lint && make test` and provides a reliable pre-PR gate.
 - README documents the new targets.
 
 ### Validation Commands
