@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, model_validator
 
 from app.dependencies import get_model_service
-from app.domain.schemas import DataPoint, TimeSeries
+from app.domain.schemas import DataPoint, ErrorResponse, TimeSeries
 from app.services.model_service import ModelService
 
 router = APIRouter(tags=["Training"])
@@ -14,8 +14,16 @@ logger = logging.getLogger(__name__)
 
 
 class FitRequest(BaseModel):
-    timestamps: list[int] = Field(..., description="Unix timestamps for each observed value.")
-    values: list[float] = Field(..., description="Observed values aligned with timestamps.")
+    timestamps: list[int] = Field(
+        ...,
+        description="Unix timestamps for each observed value.",
+        examples=[[1700000001, 1700000002, 1700000003]],
+    )
+    values: list[float] = Field(
+        ...,
+        description="Observed values aligned with timestamps.",
+        examples=[[10.0, 10.2, 10.1]],
+    )
 
     @model_validator(mode="after")
     def validate_lengths(self) -> "FitRequest":
@@ -28,12 +36,21 @@ class FitRequest(BaseModel):
 
 
 class FitResponse(BaseModel):
-    series_id: str
-    version: str
-    points_used: int
+    series_id: str = Field(..., description="Series identifier used for training.", examples=["sensor_XYZ"])
+    version: str = Field(..., description="Persisted model version created by this training call.", examples=["v1"])
+    points_used: int = Field(..., description="Number of data points consumed during training.", examples=[120])
 
 
-@router.post("/fit/{series_id}", response_model=FitResponse)
+@router.post(
+    "/fit/{series_id}",
+    response_model=FitResponse,
+    summary="Train model for one series",
+    description="Trains a new model version for the provided `series_id` using aligned timestamp/value arrays.",
+    responses={
+        400: {"model": ErrorResponse, "description": "Domain validation error (including data-quality checks)."},
+        422: {"model": ErrorResponse, "description": "Request payload validation error."},
+    },
+)
 def fit_series(
     series_id: str,
     payload: FitRequest,

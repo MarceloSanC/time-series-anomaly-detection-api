@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.dependencies import get_model_service
-from app.domain.schemas import DataPoint
+from app.domain.schemas import DataPoint, ErrorResponse
 from app.services.model_service import ModelService
 
 router = APIRouter(tags=["Prediction"])
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class PredictRequest(BaseModel):
-    timestamp: str
-    value: float
+    timestamp: str = Field(..., description="Unix timestamp represented as numeric string.", examples=["1700000100"])
+    value: float = Field(..., description="Observed value for anomaly prediction.", examples=[99.0])
 
     @field_validator("timestamp")
     @classmethod
@@ -34,11 +34,21 @@ class PredictRequest(BaseModel):
 class PredictResponse(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
-    anomaly: bool
-    model_version: str
+    anomaly: bool = Field(..., description="True when the point exceeds model threshold.", examples=[False])
+    model_version: str = Field(..., description="Model version used for prediction.", examples=["v1"])
 
 
-@router.post("/predict/{series_id}", response_model=PredictResponse)
+@router.post(
+    "/predict/{series_id}",
+    response_model=PredictResponse,
+    summary="Predict anomaly for one data point",
+    description="Runs prediction for a single timestamp/value point using latest or explicit model version.",
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid series identifier."},
+        404: {"model": ErrorResponse, "description": "Series or requested version not found."},
+        422: {"model": ErrorResponse, "description": "Request payload validation error."},
+    },
+)
 def predict_series(
     series_id: str,
     payload: PredictRequest,

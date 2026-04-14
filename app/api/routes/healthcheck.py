@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.dependencies import get_metrics_service, get_model_service
+from app.domain.schemas import ErrorResponse
 from app.services.metrics_service import MetricsService
 from app.services.model_service import ModelService
 
@@ -54,7 +55,13 @@ def _aggregate_metrics(snapshot: dict[str, Any], prefix: str) -> HealthMetrics:
     return HealthMetrics(avg=avg, p95=p95)
 
 
-@router.get("/healthcheck", response_model=HealthcheckResponse)
+@router.get(
+    "/healthcheck",
+    response_model=HealthcheckResponse,
+    summary="Service health and latency snapshot",
+    description="Returns trained-series count and aggregated latency metrics for training and prediction endpoints.",
+    responses={500: {"model": ErrorResponse, "description": "Unexpected internal error."}},
+)
 def healthcheck(
     model_service: ModelService = Depends(get_model_service),
     metrics_service: MetricsService = Depends(get_metrics_service),
