@@ -28,12 +28,18 @@ class ValidationService:
         std_threshold: float | None = None,
         flat_line_window: int | None = None,
         max_temporal_gap_factor: float | None = None,
+        flat_line_enabled: bool | None = None,
+        temporal_gap_enabled: bool | None = None,
     ) -> None:
         self.min_data_points = settings.min_data_points if min_data_points is None else min_data_points
         self.std_threshold = settings.std_threshold if std_threshold is None else std_threshold
         self.flat_line_window = settings.flat_line_window if flat_line_window is None else flat_line_window
         self.max_temporal_gap_factor = (
             settings.max_temporal_gap_factor if max_temporal_gap_factor is None else max_temporal_gap_factor
+        )
+        self.flat_line_enabled = settings.flat_line_enabled if flat_line_enabled is None else flat_line_enabled
+        self.temporal_gap_enabled = (
+            settings.temporal_gap_enabled if temporal_gap_enabled is None else temporal_gap_enabled
         )
 
     def validate_training_data(self, data: TimeSeries) -> None:
@@ -73,7 +79,7 @@ class ValidationService:
             logger.warning("Validation rejected: unordered timestamps")
             raise UnorderedTimestampsError("Timestamps must be strictly increasing")
 
-        if len(points) >= self.flat_line_window:
+        if self.flat_line_enabled and len(points) >= self.flat_line_window:
             trailing_values = values[-self.flat_line_window:]
             if max(trailing_values) == min(trailing_values):
                 logger.warning(
@@ -84,7 +90,7 @@ class ValidationService:
                     f"Trailing {self.flat_line_window} values are identical, possible frozen/disconnected sensor"
                 )
 
-        if len(points) < 2:
+        if not self.temporal_gap_enabled or len(points) < 2:
             return
 
         intervals = [next_ts - current_ts for current_ts, next_ts in zip(timestamps, timestamps[1:])]
