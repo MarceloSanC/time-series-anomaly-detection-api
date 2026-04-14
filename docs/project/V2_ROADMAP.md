@@ -296,7 +296,7 @@ Rationale:
    - Inject all parameters via `ValidationService(...)` constructor — no config patching required.
 
 7. Documentation updates
-   - Update `docs/project/API_RESPONSES.md` with:
+   - Update FastAPI route docs (`summary/description/responses`) with:
      - `FLAT_LINE_DETECTED`
      - `TEMPORAL_GAP_DETECTED`
    - Add note in `README.md` under the validation section: rules are opt-in via config,

@@ -158,6 +158,16 @@ def write_index_atomically(index_path: Path, data: dict) -> None:
 
 ---
 
+## 11. VALIDATION SERVICE: extension points and design boundaries
+
+**Decision:** `ValidationService` uses an imperative fail-fast chain of seven rules (five core + two optional sensor-quality rules). New rules require exactly two changes: a typed exception subclassing `ValidationServiceError` in `app/domain/exceptions.py`, and one entry in `VALIDATION_ERROR_CODE_MAP` in `app/api/error_handlers.py`. No handler functions, route handlers, or service signatures change.
+
+**Why opt-in flags instead of always-on:** The sensor-quality rules (flat-line, temporal-gap) target industrial IoT failure modes outside the original challenge scope. Defaulting them to active would reject valid evaluator data. Boolean flags in `config.py` keep the feature demonstrable without side effects; all thresholds and flags are injectable via the constructor for test isolation.
+
+**Modularization path:** If the sensor data quality rules grow beyond the current scope, `ValidationService` would be split into a dedicated `SensorDataQualityValidator` module. See Section 12 for the production context and domain motivation behind this boundary.
+
+---
+
 ## FAILURE MODES (document in README, do not fix unless noted)
 
 | Failure Mode | Behavior | Fixable? |

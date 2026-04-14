@@ -13,13 +13,22 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from app.dependencies import get_model_service
+from app.domain.schemas import ErrorResponse
 from app.services.model_service import ModelService
 
 router = APIRouter(tags=["Visualization"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/plot")
+@router.get(
+    "/plot",
+    summary="Render model training plot",
+    description="Returns a PNG image with training points, mean line and ±3 sigma bounds.",
+    responses={
+        404: {"model": ErrorResponse, "description": "Series or requested version not found."},
+        422: {"model": ErrorResponse, "description": "Plot data unavailable for selected model version."},
+    },
+)
 def plot_series(
     series_id: str = Query(..., description="Series identifier used during training."),
     version: str | None = Query(default=None, description="Optional model version (defaults to latest)."),

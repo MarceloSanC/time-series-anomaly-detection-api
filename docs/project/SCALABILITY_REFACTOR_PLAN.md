@@ -98,8 +98,8 @@ Why separate:
   - detector contract, storage contract, migration-on-read behavior
 - `README.md`
   - detector query examples and compatibility notes
-- `docs/project/API_RESPONSES.md`
-  - new detector-related error codes
+- FastAPI live docs (`/docs` and `/redoc`)
+  - detector query parameters and normalized error responses
 
 ### Scripts
 
@@ -180,4 +180,3 @@ Detector index schema:
 pytest -v
 .venv/bin/python scripts/compare_detectors.py
 ```
-

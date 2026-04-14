@@ -5,14 +5,20 @@ import logging
 from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_model_service
-from app.domain.schemas import ModelDetail, ModelSummary, ModelVersionMetadata
+from app.domain.schemas import ErrorResponse, ModelDetail, ModelSummary, ModelVersionMetadata
 from app.services.model_service import ModelService
 
 router = APIRouter(tags=["Model Introspection"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/models", response_model=list[ModelSummary])
+@router.get(
+    "/models",
+    response_model=list[ModelSummary],
+    summary="List tracked model series",
+    description="Lists series summaries for latest version metadata. Can run in tolerant or strict mode.",
+    responses={422: {"model": ErrorResponse, "description": "Incomplete metadata found when `strict=true`."}},
+)
 def list_models(
     strict: bool = Query(
         default=False,
@@ -27,7 +33,13 @@ def list_models(
     return summaries
 
 
-@router.get("/models/{series_id}", response_model=ModelDetail)
+@router.get(
+    "/models/{series_id}",
+    response_model=ModelDetail,
+    summary="Get model detail for one series",
+    description="Returns lineage metadata and derived data-quality indicators for the latest model version.",
+    responses={404: {"model": ErrorResponse, "description": "Series not found."}},
+)
 def get_model_detail(
     series_id: str,
     model_service: ModelService = Depends(get_model_service),
@@ -46,6 +58,9 @@ def get_model_detail(
     "/models/{series_id}/versions/{version}",
     response_model=ModelVersionMetadata,
     response_model_exclude_none=True,
+    summary="Get metadata for one model version",
+    description="Returns persisted metadata for a concrete model version. Training data is optional via `include_data`.",
+    responses={404: {"model": ErrorResponse, "description": "Series or version not found."}},
 )
 def get_model_version_metadata(
     series_id: str,

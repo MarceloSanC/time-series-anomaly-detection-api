@@ -30,6 +30,9 @@ htmlcov/
 storage/*
 !storage/.gitkeep
 
+# Miscellaneous
+misc/
+
 # Local tool/editor artifacts
 .codex
 .vscode/
