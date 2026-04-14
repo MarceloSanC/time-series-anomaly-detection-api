@@ -5,8 +5,10 @@ import pytest
 from app.domain.exceptions import (
     ConstantSeriesError,
     DuplicateTimestampsError,
+    FlatLineDetectedError,
     InsufficientDataError,
     InvalidValuesError,
+    TemporalGapDetectedError,
     UnorderedTimestampsError,
 )
 from app.domain.schemas import DataPoint, TimeSeries
@@ -115,4 +117,107 @@ def test_validate_training_data_rejects_infinite_values() -> None:
     data = _series(timestamps=[1, 2, 3], values=[10.0, float("inf"), 12.0])
 
     with pytest.raises(InvalidValuesError):
+        validator.validate_training_data(data)
+
+
+def test_validate_training_data_flat_line_disabled_allows_triggering_series() -> None:
+    """Do not reject trailing flat-line pattern when rule is disabled."""
+    validator = ValidationService(
+        min_data_points=6,
+        std_threshold=0.01,
+        flat_line_window=3,
+        flat_line_enabled=False,
+        temporal_gap_enabled=False,
+    )
+    data = _series(
+        timestamps=[1, 2, 3, 4, 5, 6],
+        values=[1.0, 2.0, 3.0, 9.0, 9.0, 9.0],
+    )
+
+    validator.validate_training_data(data)
+
+
+def test_validate_training_data_flat_line_enabled_accepts_non_flat_trailing_window() -> None:
+    """Accept data when trailing window is not flat and rule is enabled."""
+    validator = ValidationService(
+        min_data_points=6,
+        std_threshold=0.01,
+        flat_line_window=3,
+        flat_line_enabled=True,
+        temporal_gap_enabled=False,
+    )
+    data = _series(
+        timestamps=[1, 2, 3, 4, 5, 6],
+        values=[1.0, 2.0, 3.0, 7.0, 8.0, 9.0],
+    )
+
+    validator.validate_training_data(data)
+
+
+def test_validate_training_data_flat_line_enabled_rejects_flat_trailing_window() -> None:
+    """Reject data when trailing window is flat and rule is enabled."""
+    validator = ValidationService(
+        min_data_points=6,
+        std_threshold=0.01,
+        flat_line_window=3,
+        flat_line_enabled=True,
+        temporal_gap_enabled=False,
+    )
+    data = _series(
+        timestamps=[1, 2, 3, 4, 5, 6],
+        values=[1.0, 2.0, 3.0, 9.0, 9.0, 9.0],
+    )
+
+    with pytest.raises(FlatLineDetectedError):
+        validator.validate_training_data(data)
+
+
+def test_validate_training_data_temporal_gap_disabled_allows_triggering_series() -> None:
+    """Do not reject temporal gap pattern when gap rule is disabled."""
+    validator = ValidationService(
+        min_data_points=5,
+        std_threshold=0.01,
+        temporal_gap_enabled=False,
+        flat_line_enabled=False,
+    )
+    data = _series(
+        timestamps=[1, 2, 3, 4, 24],  # intervals: [1, 1, 1, 20]
+        values=[10.0, 11.0, 12.0, 13.0, 14.0],
+    )
+
+    validator.validate_training_data(data)
+
+
+def test_validate_training_data_temporal_gap_enabled_accepts_uniform_intervals() -> None:
+    """Accept data with uniform intervals when gap rule is enabled."""
+    validator = ValidationService(
+        min_data_points=5,
+        std_threshold=0.01,
+        max_temporal_gap_factor=2.0,
+        temporal_gap_enabled=True,
+        flat_line_enabled=False,
+    )
+    data = _series(
+        timestamps=[10, 20, 30, 40, 50],
+        values=[1.0, 2.0, 3.0, 4.0, 5.0],
+    )
+
+    validator.validate_training_data(data)
+
+
+def test_validate_training_data_temporal_gap_enabled_rejects_large_gap() -> None:
+    """Reject data when max interval exceeds configured multiple of median interval."""
+    validator = ValidationService(
+        min_data_points=5,
+        std_threshold=0.01,
+        max_temporal_gap_factor=2.0,
+        temporal_gap_enabled=True,
+        flat_line_enabled=False,
+    )
+    data = _series(
+        timestamps=[1, 2, 3, 4, 24],  # intervals: [1, 1, 1, 20], median=1, threshold=2
+        values=[10.0, 11.0, 12.0, 13.0, 14.0],
+    )
+
+    with pytest.raises(TemporalGapDetectedError):
         validator.validate_training_data(data)
