@@ -221,47 +221,89 @@ Rationale:
 
 ### Goal
 
-Add real-world sensor quality rules (flat line and temporal gap) to strengthen data validation for industrial time series.
+Add real-world sensor quality rules (flat line and temporal gap) to strengthen data validation for industrial time series in the training path.
 
 Rationale:
-- directly addresses common IoT failure modes
+- directly addresses common IoT failure modes (sensor disconnect, data loss)
 - improves training-data quality and detector reliability
-- shows practical production awareness beyond toy validation rules
+- demonstrates that the existing validation architecture absorbs new rules without structural changes
+- keeps inference path (`/predict`) lightweight and unaffected by training-only quality gates
 
 ### Implementation Tasks (Ordered)
 
 1. Config extensions
-   - Add in `app/config.py`:
-     - `FLAT_LINE_WINDOW` (default 10)
-     - `MAX_TEMPORAL_GAP_FACTOR` (default 2.0)
+   - Add to `app/config.py` under the existing validation thresholds:
+     - `flat_line_window: int` (default `10`)
+     - `max_temporal_gap_factor: float` (default `2.0`)
+   - No mode fields (`flat_line_mode`, `temporal_gap_mode`) — intentionally
+     excluded from this scope.
 
 2. Domain exceptions
-   - Add:
+   - Add to `app/domain/exceptions.py`:
      - `FlatLineDetectedError`
      - `TemporalGapDetectedError`
-   - Both subclass `ValidationServiceError`.
+   - Both subclass `ValidationServiceError` — compatible with the existing
+     handler dispatch in `app/api/error_handlers.py`, provided the error codes
+     are registered in `VALIDATION_ERROR_CODE_MAP` (see Task 3).
 
-3. Validation service rules
-   - Update `app/services/validation_service.py` to add:
-     - rule: flat-line on trailing window
-     - rule: max interval > factor x median interval
-   - Keep fail-fast ordering deterministic.
+3. Error handler mappings
+   - Add to `VALIDATION_ERROR_CODE_MAP` in `app/api/error_handlers.py`:
+     - `FlatLineDetectedError` → `"FLAT_LINE_DETECTED"`
+     - `TemporalGapDetectedError` → `"TEMPORAL_GAP_DETECTED"`
+   - No new handler functions required.
 
-4. Error handler mappings
-   - Map new exceptions in `app/api/error_handlers.py` with codes:
-     - `FLAT_LINE_DETECTED`
-     - `TEMPORAL_GAP_DETECTED`
+4. Validation service rules
+   - Extend `ValidationService.__init__` with optional parameters:
+     - `flat_line_window`
+     - `max_temporal_gap_factor`
+   - Defaults for both must come from `settings`, matching the current constructor pattern.
+   - Append two rules to `app/services/validation_service.py`, after the
+     existing five, in fail-fast order:
+     - **Rule 6 — flat-line:** if `len(points) >= flat_line_window` and
+       `max(values[-flat_line_window:]) == min(values[-flat_line_window:])`,
+       raise `FlatLineDetectedError`.
+     - **Rule 7 — temporal gap:** runs after timestamp uniqueness and ordering
+       checks (rules 4–5) are guaranteed to have passed; compute pairwise
+       intervals; if `max(intervals) > max_temporal_gap_factor × np.median(intervals)`,
+       raise `TemporalGapDetectedError`.
+   - Read thresholds from `self` attributes injected via `__init__`
+     (same pattern as `min_data_points` and `std_threshold`).
+   - Guard temporal-gap rule: skip if `len(points) < 2` (no intervals to compute).
+   - `validate_training_data` signature and return type remain unchanged (`-> None`).
+   - No changes to `ModelService`, `fit.py`, or `openapi_spec.yaml`.
 
 5. Tests
-   - Add unit tests in `tests/unit/test_validation_service.py`:
-     - one passing + one rejecting case per new rule
-   - Validate configurability through injected config values.
+   - Add to `tests/unit/test_validation_service.py`:
+     - flat-line: one passing case (trailing window not flat), one rejection case
+       (trailing `flat_line_window` values identical, total series std above threshold)
+     - temporal-gap: one passing case (uniform intervals), one rejection case
+       (one gap > `max_temporal_gap_factor × np.median(intervals)`)
+   - Inject thresholds via `ValidationService(...)` constructor — same pattern
+     as existing tests; no config patching required.
+
+6. Documentation updates
+   - Update `.env.example` with the two new config fields and their defaults.
+   - Update `docs/project/API_RESPONSES.md` with:
+     - `FLAT_LINE_DETECTED`
+     - `TEMPORAL_GAP_DETECTED`
+   - Add two-line note in `README.md` under the validation section referencing
+     the new rules and their configurable thresholds.
+
+7. Add `ValidationService` extension points section to `docs/project/ARCHITECTURE.md`.
 
 ### Acceptance Criteria
 
-- Flat-line trailing windows are rejected with `FLAT_LINE_DETECTED`.
-- Temporal gaps beyond configured factor are rejected with `TEMPORAL_GAP_DETECTED`.
-- Both thresholds configurable through environment/config.
+- Scope is explicit: this stage touches only the training (`/fit`) validation path.
+- `POST /fit` contract (request, response, status codes) is unchanged.
+- Series with `flat_line_window` or more identical trailing values is rejected
+  with `400 FLAT_LINE_DETECTED`.
+- Series with a gap exceeding `max_temporal_gap_factor × median interval` is
+  rejected with `400 TEMPORAL_GAP_DETECTED`.
+- Both thresholds are configurable via `.env` / `config.py`.
+- `ValidationService.__init__` accepts both new thresholds as optional overrides
+  (consistent with existing constructor pattern).
+- No changes to `ModelService`, `fit.py`, `openapi_spec.yaml`, or any other
+  route or schema file.
 - `pytest -v` passes.
 
 ---
