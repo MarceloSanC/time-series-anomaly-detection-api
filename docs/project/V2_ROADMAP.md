@@ -362,14 +362,14 @@ Rationale:
 
 4. Documentation integration
    - Reference results in:
-     - `docs/project/MODELING_NOTES.md`
+     - `docs/project/MODEL_DESIGN_NOTES.md`
      - `README.md`
 
 ### Acceptance Criteria
 
 - Script runs end-to-end without errors.
 - Output JSON includes both detectors and all required metrics.
-- Results are referenced in `MODELING_NOTES.md` and `README.md`.
+- Results are referenced in `MODEL_DESIGN_NOTES.md` and `README.md`.
 
 ### Validation Commands
 
@@ -495,6 +495,8 @@ pytest -v
 ---
 
 ## STAGE G (P1) — Quality Tooling and Makefile Ergonomics
+
+Status: Completed
 
 ### Goal
 
