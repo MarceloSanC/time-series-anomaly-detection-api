@@ -24,7 +24,7 @@ class PredictRequest(BaseModel):
         text = value.strip()
         try:
             int(text)
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError):
             raise ValueError("timestamp must be a unix timestamp string")
         if text == "":
             raise ValueError("timestamp must be a unix timestamp string")
