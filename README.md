@@ -61,6 +61,22 @@ docker compose up --build -d
 docker compose logs -f api
 ```
 
+## Common Make Targets
+
+| Target | Command | Description |
+|---|---|---|
+| `make install` | `pip install -e ".[dev]"` | Install all dependencies including dev tools |
+| `make test` | `pytest -v` | Run full test suite with coverage gate |
+| `make coverage` | `pytest --cov=app --cov-report=html` | Generate HTML coverage report at `htmlcov/index.html` |
+| `make lint` | `ruff check app tests` | Run Ruff linter (rules E and F) |
+| `make check` | `make lint && make test` | Pre-PR gate: lint then test |
+| `make run` | `uvicorn app.main:app --reload` | Start local dev server on port 8000 |
+| `make docker-up` | `docker compose up -d` | Start service in background |
+| `make docker-down` | `docker compose down -v` | Stop service and remove volumes |
+| `make docker-test` | `docker compose run --rm api-tests` | Run tests inside container |
+| `make benchmark` | `python scripts/benchmark.py` | Run 100-request parallel inference benchmark |
+| `make smoke` | `./scripts/manual/stage2_smoke_test.sh` | Manual smoke test against running service |
+
 ## Endpoint Examples
 
 Train:
@@ -147,7 +163,7 @@ The image shows training points (scatter), the model mean, and upper/lower 3-sig
 Run Stage 4 benchmark (100 parallel inference requests):
 
 ```bash
-.venv/bin/python scripts/benchmark.py
+make benchmark
 ```
 
 Benchmark output is saved to `scripts/benchmark_results.json`.
@@ -156,14 +172,14 @@ Latest recorded run:
 
 | Metric | Value |
 |---|---:|
-| p50 (ms) | 211.26 |
-| p95 (ms) | 279.84 |
-| p99 (ms) | 282.96 |
-| avg (ms) | 204.03 |
-| min (ms) | 19.92 |
-| max (ms) | 283.93 |
-| throughput (req/s) | 336.42 |
-| total duration (s) | 0.30 |
+| p50 (ms) | 243.66 |
+| p95 (ms) | 308.60 |
+| p99 (ms) | 311.94 |
+| avg (ms) | 225.00 |
+| min (ms) | 21.44 |
+| max (ms) | 312.26 |
+| throughput (req/s) | 306.92 |
+| total duration (s) | 0.33 |
 
 Interpretation:
 - `min` usually reflects early requests that reached a less busy server state.
@@ -178,6 +194,47 @@ Interpretation:
 - Metrics are in-memory and reset on service restart.
 - Persistence is local filesystem (`storage/`), suitable for single-instance deployments.
 - `/plot` requires metadata that includes `training_data`; legacy models without it return `422 PLOT_DATA_UNAVAILABLE`.
+
+## Troubleshooting
+
+**`/plot` returns `422 PLOT_DATA_UNAVAILABLE`**
+
+The plot endpoint requires `training_data` to be persisted in `metadata.json`. Models trained before this field was added do not have it. Retrain the series to generate a compatible artifact:
+
+```bash
+curl -X POST "http://localhost:8000/fit/sensor_XYZ" -H "Content-Type: application/json" -d '{"timestamps":[...],"values":[...]}'
+```
+
+**`POST /fit` returns a `400` validation error**
+
+Common validation error codes and their causes:
+
+| Error code | Cause |
+|---|---|
+| `INSUFFICIENT_DATA` | Fewer than `MIN_DATA_POINTS` points (default: 30) |
+| `CONSTANT_SERIES` | Series standard deviation is below `STD_THRESHOLD` |
+| `DUPLICATE_TIMESTAMPS` | Two or more points share the same timestamp |
+| `UNORDERED_TIMESTAMPS` | Timestamps are not strictly increasing |
+| `INVALID_VALUES` | Series contains `NaN` or infinite values |
+| `FLAT_LINE_DETECTED` | Trailing window is constant (only when `FLAT_LINE_ENABLED=true`) |
+| `TEMPORAL_GAP_DETECTED` | Max interval exceeds `MAX_TEMPORAL_GAP_FACTOR × median interval` (only when `TEMPORAL_GAP_ENABLED=true`) |
+
+**Quick Docker validation**
+
+```bash
+# Start and verify the service is healthy
+make docker-up
+curl http://localhost:8000/healthcheck
+
+# Run containerized test suite
+make docker-test
+
+# Inspect logs
+docker compose logs -f api
+
+# Tear down
+make docker-down
+```
 
 ## Training Validation Extensions
 

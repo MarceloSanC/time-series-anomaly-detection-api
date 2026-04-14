@@ -23,7 +23,8 @@ dependencies = [
 dev = [
   "pytest==8.2.0",
   "pytest-asyncio==0.23.0",
-  "pytest-cov==5.0.0"
+  "pytest-cov==5.0.0",
+  "ruff>=0.4.0"
 ]
 
 [tool.setuptools.packages.find]
@@ -35,3 +36,9 @@ namespaces = false
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-ra --cov=app --cov-report=term-missing --cov-fail-under=80"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F"]

@@ -59,7 +59,7 @@ def get_model_detail(
     response_model=ModelVersionMetadata,
     response_model_exclude_none=True,
     summary="Get metadata for one model version",
-    description="Returns persisted metadata for a concrete model version. Training data is optional via `include_data`.",
+    description="Returns persisted metadata for a concrete model version. Training data is optional via `include_data`.",  # noqa: E501
     responses={404: {"model": ErrorResponse, "description": "Series or version not found."}},
 )
 def get_model_version_metadata(

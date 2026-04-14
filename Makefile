@@ -3,7 +3,7 @@ PIP ?= $(PYTHON) -m pip
 PYTEST ?= $(PYTHON) -m pytest
 UVICORN ?= $(PYTHON) -m uvicorn
 
-.PHONY: install test coverage run lint docker-build docker-up docker-test-build docker-test
+.PHONY: install test coverage run lint check docker-build docker-up docker-down docker-test-build docker-test benchmark smoke
 
 install:
 	$(PIP) install -e ".[dev]"
@@ -19,7 +19,10 @@ run:
 	$(UVICORN) app.main:app --host 0.0.0.0 --port 8000 --reload
 
 lint:
-	$(PYTHON) -m compileall app tests
+	$(PYTHON) -m ruff check app tests
+
+check:
+	$(MAKE) lint && $(MAKE) test
 
 docker-build:
 	docker compose build
@@ -27,8 +30,17 @@ docker-build:
 docker-up:
 	docker compose up -d
 
+docker-down:
+	docker compose down -v
+
 docker-test-build:
 	docker compose --profile test build api-tests
 
 docker-test:
 	docker compose --profile test run --rm api-tests
+
+benchmark:
+	.venv/bin/python scripts/benchmark.py
+
+smoke:
+	./scripts/manual/stage2_smoke_test.sh
