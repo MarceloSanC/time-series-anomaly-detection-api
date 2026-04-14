@@ -25,6 +25,14 @@ class InvalidValuesError(ValidationServiceError):
     """Raised when training values contain NaN or infinity."""
 
 
+class FlatLineDetectedError(ValidationServiceError):
+    """Raised when the trailing validation window contains identical values."""
+
+
+class TemporalGapDetectedError(ValidationServiceError):
+    """Raised when timestamp intervals contain an abnormal temporal gap."""
+
+
 class SeriesNotFoundError(Exception):
     """Raised when requested series_id does not exist in repository."""
 
