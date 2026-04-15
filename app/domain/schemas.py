@@ -46,6 +46,7 @@ class ModelInfo(BaseModel):
     """Summary metadata for a trained time-series model lineage."""
 
     series_id: str
+    detector: DetectorType = "gaussian"
     latest_version: str
     versions: list[str]
     trained_at: str
@@ -68,6 +69,7 @@ class ModelSummary(BaseModel):
     """Compact per-series summary used by the `/models` list endpoint."""
 
     series_id: str
+    detector: DetectorType = "gaussian"
     latest_version: str
     n_samples: int
     trained_at: str
@@ -77,6 +79,7 @@ class ModelDetail(BaseModel):
     """Detailed per-series payload used by the `/models/{series_id}` endpoint."""
 
     series_id: str
+    detector: DetectorType = "gaussian"
     latest_version: str
     versions: list[str]
     trained_at: str

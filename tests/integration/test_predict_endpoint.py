@@ -38,6 +38,7 @@ def test_predict_endpoint_uses_latest_model_when_version_not_provided(client: Te
     assert response.status_code == 200
     payload = response.json()
     assert payload["model_version"] == "v2"
+    assert payload["detector"] == "gaussian"
     assert payload["anomaly"] is True
     assert isinstance(payload["anomaly"], bool)
 
@@ -53,6 +54,7 @@ def test_predict_endpoint_accepts_explicit_v2_query_param(client: TestClient) ->
 
     assert response.status_code == 200
     assert response.json()["model_version"] == "v2"
+    assert response.json()["detector"] == "gaussian"
 
 
 def test_predict_endpoint_keeps_old_versions_accessible_after_retrain(client: TestClient) -> None:
@@ -78,6 +80,8 @@ def test_predict_endpoint_keeps_old_versions_accessible_after_retrain(client: Te
     assert latest_version_response.status_code == 200
     assert old_version_response.json()["model_version"] == "v1"
     assert latest_version_response.json()["model_version"] == "v3"
+    assert old_version_response.json()["detector"] == "gaussian"
+    assert latest_version_response.json()["detector"] == "gaussian"
 
 
 def test_predict_endpoint_returns_404_for_unknown_series(client: TestClient) -> None:
@@ -152,8 +156,14 @@ def test_predict_endpoint_maps_unhandled_runtime_error_to_internal_error(client:
     """Unexpected service failure should return normalized INTERNAL_ERROR response."""
 
     class BrokenService:
-        def predict(self, series_id: str, data_point: object, version: str | None = None) -> object:
-            _ = (series_id, data_point, version)
+        def predict(
+            self,
+            series_id: str,
+            data_point: object,
+            version: str | None = None,
+            detector: str = "gaussian",
+        ) -> object:
+            _ = (series_id, data_point, version, detector)
             raise RuntimeError("boom")
 
     client.app.dependency_overrides[get_model_service] = lambda: BrokenService()
@@ -172,3 +182,63 @@ def test_predict_endpoint_maps_unhandled_runtime_error_to_internal_error(client:
     assert response.status_code == 500
     payload = response.json()
     assert payload["error"] == "INTERNAL_ERROR"
+
+
+def test_predict_endpoint_supports_isolation_forest_detector(client: TestClient) -> None:
+    """Predicting with isolation_forest should resolve within that detector namespace."""
+    fit = client.post(
+        "/fit/sensor_iso?detector=isolation_forest",
+        json=_fit_payload(start_timestamp=1700000001, start_value=10.0),
+    )
+    assert fit.status_code == 200
+
+    response = client.post(
+        "/predict/sensor_iso?detector=isolation_forest",
+        json={"timestamp": "1700000100", "value": 99.0},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["detector"] == "isolation_forest"
+    assert payload["model_version"] == "v1"
+    assert isinstance(payload["anomaly"], bool)
+
+
+def test_predict_endpoint_returns_422_for_unsupported_detector(client: TestClient) -> None:
+    """Unsupported detector query must map to normalized 422 error payload."""
+    _train_baseline(client)
+
+    response = client.post(
+        "/predict/sensor_A?detector=random_forest",
+        json={"timestamp": "1700000100", "value": 99.0},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"] == "UNSUPPORTED_DETECTOR"
+    assert "is not supported" in payload["message"]
+    assert "timestamp" in payload
+
+
+def test_predict_endpoint_returns_404_for_version_that_exists_in_other_detector(client: TestClient) -> None:
+    """Version lookup must stay in selected detector namespace."""
+    fit_gaussian = client.post(
+        "/fit/sensor_dual",
+        json=_fit_payload(start_timestamp=1, start_value=10.0),
+    )
+    fit_isolation = client.post(
+        "/fit/sensor_dual?detector=isolation_forest",
+        json=_fit_payload(start_timestamp=1001, start_value=20.0),
+    )
+    assert fit_gaussian.status_code == 200
+    assert fit_isolation.status_code == 200
+
+    response = client.post(
+        "/predict/sensor_dual?detector=isolation_forest&version=v2",
+        json={"timestamp": "1700000200", "value": 22.0},
+    )
+
+    assert response.status_code == 404
+    payload = response.json()
+    assert payload["error"] == "VERSION_NOT_FOUND_FOR_DETECTOR"
+    assert "detector 'isolation_forest'" in payload["message"]

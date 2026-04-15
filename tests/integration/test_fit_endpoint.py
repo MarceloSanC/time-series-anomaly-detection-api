@@ -23,6 +23,7 @@ def test_fit_endpoint_trains_series_and_returns_contract_payload(client: TestCli
     assert response.status_code == 200
     payload = response.json()
     assert payload["series_id"] == "sensor_A"
+    assert payload["detector"] == "gaussian"
     assert payload["version"] == "v1"
     assert payload["points_used"] == 30
 
@@ -79,8 +80,8 @@ def test_fit_endpoint_maps_unmapped_validation_service_error(client: TestClient)
     """Unmapped ValidationServiceError should fallback to generic VALIDATION_ERROR."""
 
     class BrokenService:
-        def train(self, series_id: str, data: object) -> object:
-            _ = (series_id, data)
+        def train(self, series_id: str, data: object, detector: str = "gaussian") -> object:
+            _ = (series_id, data, detector)
             raise ValidationServiceError("custom validation failure")
 
     client.app.dependency_overrides[get_model_service] = lambda: BrokenService()
@@ -95,3 +96,44 @@ def test_fit_endpoint_maps_unmapped_validation_service_error(client: TestClient)
     assert response.status_code == 400
     payload = response.json()
     assert payload["error"] == "VALIDATION_ERROR"
+
+
+def test_fit_endpoint_accepts_isolation_forest_detector(client: TestClient) -> None:
+    """Training with ?detector=isolation_forest should return detector-aware payload."""
+    response = client.post(
+        "/fit/sensor_iso?detector=isolation_forest",
+        json=_fit_payload(start_timestamp=1700000001, start_value=10.0),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["series_id"] == "sensor_iso"
+    assert payload["detector"] == "isolation_forest"
+    assert payload["version"] == "v1"
+
+
+def test_fit_endpoint_returns_422_for_unsupported_detector(client: TestClient) -> None:
+    """Unsupported detector must map to UNSUPPORTED_DETECTOR via service validation."""
+    response = client.post(
+        "/fit/sensor_A?detector=random_forest",
+        json=_fit_payload(start_timestamp=1700000001, start_value=10.0),
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"] == "UNSUPPORTED_DETECTOR"
+    assert "is not supported" in payload["message"]
+    assert "timestamp" in payload
+
+
+def test_fit_endpoint_rejects_case_variant_detector_value(client: TestClient) -> None:
+    """Detector values are case-sensitive and must be normalized by caller."""
+    response = client.post(
+        "/fit/sensor_A?detector=Gaussian",
+        json=_fit_payload(start_timestamp=1700000001, start_value=10.0),
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"] == "UNSUPPORTED_DETECTOR"
+    assert "Gaussian" in payload["message"]

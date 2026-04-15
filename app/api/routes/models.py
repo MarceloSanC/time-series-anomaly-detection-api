@@ -24,11 +24,19 @@ def list_models(
         default=False,
         description="When true, fail-fast if any series has incomplete latest metadata.",
     ),
+    detector: str | None = Query(
+        default=None,
+        description="Filter results to a specific detector type. Supported values: gaussian, isolation_forest. Returns all detectors when omitted.",
+        openapi_examples={
+            "gaussian": {"summary": "Gaussian only", "value": "gaussian"},
+            "isolation_forest": {"summary": "Isolation Forest only", "value": "isolation_forest"},
+        },
+    ),
     model_service: ModelService = Depends(get_model_service),
 ) -> list[ModelSummary]:
     """List all tracked series with latest version and summary metadata."""
-    logger.info("Models list request received", extra={"strict": strict})
-    summaries = model_service.list_model_summaries(strict=strict)
+    logger.info("Models list request received", extra={"strict": strict, "detector": detector})
+    summaries = model_service.list_model_summaries(strict=strict, detector=detector)
     logger.info("Models list request completed", extra={"series_count": len(summaries), "strict": strict})
     return summaries
 
@@ -42,14 +50,22 @@ def list_models(
 )
 def get_model_detail(
     series_id: str,
+    detector: str = Query(
+        default="gaussian",
+        description="Detector type used to scope series lookup. Supported values: gaussian, isolation_forest.",
+        openapi_examples={
+            "gaussian": {"summary": "Default detector", "value": "gaussian"},
+            "isolation_forest": {"summary": "Isolation Forest detector", "value": "isolation_forest"},
+        },
+    ),
     model_service: ModelService = Depends(get_model_service),
 ) -> ModelDetail:
     """Return model lineage metadata for one `series_id`."""
-    logger.info("Model detail request received", extra={"series_id": series_id})
-    info = model_service.get_model_detail(series_id=series_id)
+    logger.info("Model detail request received", extra={"series_id": series_id, "detector": detector})
+    info = model_service.get_model_detail(series_id=series_id, detector=detector)
     logger.info(
         "Model detail request completed",
-        extra={"series_id": series_id, "latest_version": info.latest_version},
+        extra={"series_id": series_id, "detector": detector, "latest_version": info.latest_version},
     )
     return info
 
@@ -65,6 +81,14 @@ def get_model_detail(
 def get_model_version_metadata(
     series_id: str,
     version: str,
+    detector: str = Query(
+        default="gaussian",
+        description="Detector type used to scope version lookup. Supported values: gaussian, isolation_forest.",
+        openapi_examples={
+            "gaussian": {"summary": "Default detector", "value": "gaussian"},
+            "isolation_forest": {"summary": "Isolation Forest detector", "value": "isolation_forest"},
+        },
+    ),
     model_service: ModelService = Depends(get_model_service),
     include_data: bool = Query(
         default=False,
@@ -74,16 +98,17 @@ def get_model_version_metadata(
     """Return metadata for one concrete `series_id` model version."""
     logger.info(
         "Model version metadata request received",
-        extra={"series_id": series_id, "version": version, "include_data": include_data},
+        extra={"series_id": series_id, "version": version, "detector": detector, "include_data": include_data},
     )
     payload = model_service.get_version_metadata(
         series_id=series_id,
         version=version,
+        detector=detector,
         include_data=include_data,
     )
 
     logger.info(
         "Model version metadata request completed",
-        extra={"series_id": series_id, "version": version, "include_data": include_data},
+        extra={"series_id": series_id, "version": version, "detector": detector, "include_data": include_data},
     )
     return payload

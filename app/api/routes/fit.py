@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, model_validator
 
 from app.dependencies import get_model_service
-from app.domain.schemas import DataPoint, ErrorResponse, TimeSeries
+from app.domain.schemas import DataPoint, DetectorType, ErrorResponse, TimeSeries
 from app.services.model_service import ModelService
 
 router = APIRouter(tags=["Training"])
@@ -37,6 +37,11 @@ class FitRequest(BaseModel):
 
 class FitResponse(BaseModel):
     series_id: str = Field(..., description="Series identifier used for training.", examples=["sensor_XYZ"])
+    detector: DetectorType = Field(
+        ...,
+        description="Detector type used for training.",
+        examples=["gaussian", "isolation_forest"],
+    )
     version: str = Field(..., description="Persisted model version created by this training call.", examples=["v1"])
     points_used: int = Field(..., description="Number of data points consumed during training.", examples=[120])
 
@@ -48,16 +53,24 @@ class FitResponse(BaseModel):
     description="Trains a new model version for the provided `series_id` using aligned timestamp/value arrays.",
     responses={
         400: {"model": ErrorResponse, "description": "Domain validation error (including data-quality checks)."},
-        422: {"model": ErrorResponse, "description": "Request payload validation error."},
+        422: {"model": ErrorResponse, "description": "Request payload or detector validation error."},
     },
 )
 def fit_series(
     series_id: str,
     payload: FitRequest,
+    detector: str = Query(
+        default="gaussian",
+        description="Detector type to train. Supported values: gaussian, isolation_forest.",
+        openapi_examples={
+            "gaussian": {"summary": "Default detector", "value": "gaussian"},
+            "isolation_forest": {"summary": "Isolation Forest detector", "value": "isolation_forest"},
+        },
+    ),
     model_service: ModelService = Depends(get_model_service),
 ) -> FitResponse:
     """Train a model for the given `series_id` and return contract response."""
-    logger.info("Fit request received", extra={"series_id": series_id})
+    logger.info("Fit request received", extra={"series_id": series_id, "detector": detector})
 
     series = TimeSeries(
         data=[
@@ -65,6 +78,9 @@ def fit_series(
             for timestamp, value in zip(payload.timestamps, payload.values)
         ]
     )
-    trained = model_service.train(series_id=series_id, data=series)
-    logger.info("Fit request completed", extra={"series_id": series_id, "version": trained.version})
-    return FitResponse(series_id=trained.series_id, version=trained.version, points_used=trained.n_samples)
+    trained = model_service.train(series_id=series_id, data=series, detector=detector)
+    logger.info(
+        "Fit request completed",
+        extra={"series_id": series_id, "detector": detector, "version": trained.version},
+    )
+    return FitResponse(series_id=trained.series_id, detector=trained.detector, version=trained.version, points_used=trained.n_samples)

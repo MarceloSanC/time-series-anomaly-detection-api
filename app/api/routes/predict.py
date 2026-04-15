@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.dependencies import get_model_service
-from app.domain.schemas import DataPoint, ErrorResponse
+from app.domain.schemas import DataPoint, DetectorType, ErrorResponse
 from app.services.model_service import ModelService
 
 router = APIRouter(tags=["Prediction"])
@@ -36,6 +36,11 @@ class PredictResponse(BaseModel):
 
     anomaly: bool = Field(..., description="True when the point exceeds model threshold.", examples=[False])
     model_version: str = Field(..., description="Model version used for prediction.", examples=["v1"])
+    detector: DetectorType = Field(
+        ...,
+        description="Detector type used for prediction.",
+        examples=["gaussian", "isolation_forest"],
+    )
 
 
 @router.post(
@@ -53,19 +58,28 @@ def predict_series(
     series_id: str,
     payload: PredictRequest,
     version: str | None = Query(default=None),
+    detector: str = Query(
+        default="gaussian",
+        description="Detector type to use for prediction. Supported values: gaussian, isolation_forest.",
+        openapi_examples={
+            "gaussian": {"summary": "Default detector", "value": "gaussian"},
+            "isolation_forest": {"summary": "Isolation Forest detector", "value": "isolation_forest"},
+        },
+    ),
     model_service: ModelService = Depends(get_model_service),
 ) -> PredictResponse:
     """Predict anomaly status for one point using latest or requested version."""
-    logger.info("Predict request received", extra={"series_id": series_id, "version": version})
+    logger.info("Predict request received", extra={"series_id": series_id, "version": version, "detector": detector})
     timestamp = int(payload.timestamp)
 
     prediction = model_service.predict(
         series_id=series_id,
         data_point=DataPoint(timestamp=timestamp, value=payload.value),
         version=version,
+        detector=detector,
     )
     logger.info(
         "Predict request completed",
         extra={"series_id": series_id, "version": prediction.version, "anomaly": prediction.is_anomaly},
     )
-    return PredictResponse(anomaly=prediction.is_anomaly, model_version=prediction.version)
+    return PredictResponse(anomaly=prediction.is_anomaly, model_version=prediction.version, detector=prediction.detector)
