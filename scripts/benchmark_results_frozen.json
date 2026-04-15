@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-04-15T15:58:33.341943Z",
+  "runs": {
+    "gaussian": {
+      "generated_at": "2026-04-15T15:58:33.798766Z",
+      "target": {
+        "base_url": "http://localhost:8000",
+        "series_id": "sensor_benchmark_gaussian",
+        "detector": "gaussian",
+        "trained_version": "v1"
+      },
+      "workload": {
+        "n_train_points": 180,
+        "n_parallel_inference_requests": 100
+      },
+      "latency_ms": {
+        "p50": 291.5294169997651,
+        "p95": 368.95490760007306,
+        "p99": 369.95921157151315,
+        "avg": 262.29527627003336,
+        "min": 35.76677899945935,
+        "max": 370.31259900140867
+      },
+      "throughput_rps": 250.8037444899319,
+      "total_duration_seconds": 0.3987181299999065
+    },
+    "isolation_forest": {
+      "generated_at": "2026-04-15T15:58:34.165945Z",
+      "target": {
+        "base_url": "http://localhost:8000",
+        "series_id": "sensor_benchmark_isolation_forest",
+        "detector": "isolation_forest",
+        "trained_version": "v1"
+      },
+      "workload": {
+        "n_train_points": 180,
+        "n_parallel_inference_requests": 100
+      },
+      "latency_ms": {
+        "p50": 249.64019200069743,
+        "p95": 322.58784925043074,
+        "p99": 325.1565322404349,
+        "avg": 232.32736979007313,
+        "min": 21.86547699966468,
+        "max": 327.7943119992415
+      },
+      "throughput_rps": 292.94697665798975,
+      "total_duration_seconds": 0.34135870300087845
+    }
+  }
+}

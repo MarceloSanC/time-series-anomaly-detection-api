@@ -17,12 +17,30 @@ class FitRequest(BaseModel):
     timestamps: list[int] = Field(
         ...,
         description="Unix timestamps for each observed value.",
-        examples=[[1700000001, 1700000002, 1700000003]],
+        examples=[
+            [
+                1700000001, 1700000002, 1700000003, 1700000004, 1700000005,
+                1700000006, 1700000007, 1700000008, 1700000009, 1700000010,
+                1700000011, 1700000012, 1700000013, 1700000014, 1700000015,
+                1700000016, 1700000017, 1700000018, 1700000019, 1700000020,
+                1700000021, 1700000022, 1700000023, 1700000024, 1700000025,
+                1700000026, 1700000027, 1700000028, 1700000029, 1700000030,
+            ]
+        ],
     )
     values: list[float] = Field(
         ...,
         description="Observed values aligned with timestamps.",
-        examples=[[10.0, 10.2, 10.1]],
+        examples=[
+            [
+                10.0, 10.3, 10.6, 10.9, 11.2,
+                11.5, 11.8, 12.0, 12.3, 12.6,
+                12.9, 13.2, 13.5, 13.8, 14.0,
+                14.3, 14.6, 14.9, 15.2, 15.5,
+                15.8, 16.1, 16.4, 16.7, 17.0,
+                17.3, 17.6, 17.9, 18.2, 18.5,
+            ]
+        ],
     )
 
     @model_validator(mode="after")
@@ -52,8 +70,62 @@ class FitResponse(BaseModel):
     summary="Train model for one series",
     description="Trains a new model version for the provided `series_id` using aligned timestamp/value arrays.",
     responses={
-        400: {"model": ErrorResponse, "description": "Domain validation error (including data-quality checks)."},
-        422: {"model": ErrorResponse, "description": "Request payload or detector validation error."},
+        400: {
+            "model": ErrorResponse,
+            "description": "Domain validation error (including data-quality checks).",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "insufficient_data": {
+                            "summary": "Insufficient points for training",
+                            "value": {
+                                "error": "INSUFFICIENT_DATA",
+                                "message": "Time series must contain at least 30 points",
+                                "detail": None,
+                                "timestamp": "2026-04-15T16:45:00Z",
+                            },
+                        },
+                        "flat_line_detected": {
+                            "summary": "Trailing flat-line detected",
+                            "value": {
+                                "error": "FLAT_LINE_DETECTED",
+                                "message": "Last 10 values are identical - possible sensor disconnect",
+                                "detail": None,
+                                "timestamp": "2026-04-15T16:45:00Z",
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        422: {
+            "model": ErrorResponse,
+            "description": "Request payload or detector validation error.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "unsupported_detector": {
+                            "summary": "Unsupported detector query value",
+                            "value": {
+                                "error": "UNSUPPORTED_DETECTOR",
+                                "message": "Detector 'random_forest' is not supported",
+                                "detail": None,
+                                "timestamp": "2026-04-15T16:45:00Z",
+                            },
+                        },
+                        "payload_validation_error": {
+                            "summary": "Invalid request body",
+                            "value": {
+                                "error": "VALIDATION_ERROR",
+                                "message": "Request payload validation failed",
+                                "detail": "[{'type': 'value_error', 'loc': ['body', 'timestamps'], 'msg': 'timestamps and values cannot be empty'}]",
+                                "timestamp": "2026-04-15T16:45:00Z",
+                            },
+                        },
+                    }
+                }
+            },
+        },
     },
 )
 def fit_series(

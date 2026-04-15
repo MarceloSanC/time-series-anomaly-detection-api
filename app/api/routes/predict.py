@@ -49,9 +49,81 @@ class PredictResponse(BaseModel):
     summary="Predict anomaly for one data point",
     description="Runs prediction for a single timestamp/value point using latest or explicit model version.",
     responses={
-        400: {"model": ErrorResponse, "description": "Invalid series identifier."},
-        404: {"model": ErrorResponse, "description": "Series or requested version not found."},
-        422: {"model": ErrorResponse, "description": "Request payload validation error."},
+        400: {
+            "model": ErrorResponse,
+            "description": "Invalid series identifier.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "invalid_series_id": {
+                            "summary": "Unsafe series id path",
+                            "value": {
+                                "error": "INVALID_SERIES_ID",
+                                "message": "Invalid series_id: 'sensor..A'",
+                                "detail": None,
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        }
+                    }
+                }
+            },
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "Series or requested version not found.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "series_not_found": {
+                            "summary": "Series does not exist",
+                            "value": {
+                                "error": "SERIES_NOT_FOUND",
+                                "message": "Series 'missing_series' not found",
+                                "detail": None,
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        },
+                        "version_not_found_for_detector": {
+                            "summary": "Version missing in selected detector namespace",
+                            "value": {
+                                "error": "VERSION_NOT_FOUND_FOR_DETECTOR",
+                                "message": "Version 'v999' not found for series 'sensor_A' detector 'gaussian'",
+                                "detail": None,
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        422: {
+            "model": ErrorResponse,
+            "description": "Request payload validation error or unsupported detector value.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "unsupported_detector": {
+                            "summary": "Unsupported detector query value",
+                            "value": {
+                                "error": "UNSUPPORTED_DETECTOR",
+                                "message": "Detector 'random_forest' is not supported",
+                                "detail": None,
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        },
+                        "payload_validation_error": {
+                            "summary": "Invalid request body",
+                            "value": {
+                                "error": "VALIDATION_ERROR",
+                                "message": "Request payload validation failed",
+                                "detail": "[{'type': 'value_error', 'loc': ['body', 'timestamp'], 'msg': 'timestamp must be a unix timestamp string'}]",
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        },
+                    }
+                }
+            },
+        },
     },
 )
 def predict_series(

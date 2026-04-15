@@ -1,22 +1,23 @@
 {
-  "generated_at": "2026-04-14T23:19:53.723868Z",
+  "generated_at": "2026-04-15T19:10:01.306952Z",
   "target": {
     "base_url": "http://localhost:8000",
     "series_id": "sensor_benchmark",
-    "trained_version": "v4"
+    "detector": "isolation_forest",
+    "trained_version": "v1"
   },
   "workload": {
     "n_train_points": 180,
     "n_parallel_inference_requests": 100
   },
   "latency_ms": {
-    "p50": 243.66364500383497,
-    "p95": 308.59921144874534,
-    "p99": 311.94358795350126,
-    "avg": 225.00258483036305,
-    "min": 21.43766299559502,
-    "max": 312.2589970007539
+    "p50": 3710.5252600013046,
+    "p95": 4847.528654499365,
+    "p99": 4861.92143340133,
+    "avg": 3585.2477769103275,
+    "min": 449.2050380031287,
+    "max": 4877.828397002304
   },
-  "throughput_rps": 306.9196408026144,
-  "total_duration_seconds": 0.3258181839992176
+  "throughput_rps": 20.423233644434674,
+  "total_duration_seconds": 4.896384272000432
 }
