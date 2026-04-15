@@ -225,7 +225,7 @@ def test_get_plot_data_raises_when_metadata_file_is_missing(tmp_path: Path) -> N
     )
     service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
 
-    metadata_path = tmp_path / "sensor_A" / "v1" / "metadata.json"
+    metadata_path = tmp_path / "sensor_A" / "gaussian" / "v1" / "metadata.json"
     metadata_path.unlink()
 
     with pytest.raises(PlotDataUnavailableError):
@@ -327,7 +327,7 @@ def test_list_model_summaries_strict_raises_for_missing_metadata(tmp_path: Path)
         validation_service=ValidationService(min_data_points=1),
     )
     service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
-    (tmp_path / "sensor_A" / "v1" / "metadata.json").unlink()
+    (tmp_path / "sensor_A" / "gaussian" / "v1" / "metadata.json").unlink()
 
     with pytest.raises(MetadataIncompleteError):
         service.list_model_summaries(strict=True)
@@ -343,7 +343,7 @@ def test_list_model_summaries_non_strict_skips_incomplete_series(tmp_path: Path)
     )
     service.train(series_id="sensor_ok", data=_series([1.0, 2.0, 3.0]))
     service.train(series_id="sensor_bad", data=_series([4.0, 5.0, 6.0]))
-    (tmp_path / "sensor_bad" / "v1" / "metadata.json").unlink()
+    (tmp_path / "sensor_bad" / "gaussian" / "v1" / "metadata.json").unlink()
 
     summaries = service.list_model_summaries(strict=False)
 

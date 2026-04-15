@@ -45,7 +45,9 @@ def test_models_endpoint_tolerates_incomplete_metadata_by_default(client: TestCl
     assert valid.status_code == 200
     assert invalid.status_code == 200
 
-    missing_metadata = client.app.state.model_repository.storage_path / "sensor_bad" / "v1" / "metadata.json"
+    missing_metadata = (
+        client.app.state.model_repository.storage_path / "sensor_bad" / "gaussian" / "v1" / "metadata.json"
+    )
     missing_metadata.unlink()
 
     response = client.get("/models")
@@ -62,7 +64,9 @@ def test_models_endpoint_strict_mode_returns_422_for_incomplete_metadata(client:
     assert valid.status_code == 200
     assert invalid.status_code == 200
 
-    missing_metadata = client.app.state.model_repository.storage_path / "sensor_bad" / "v1" / "metadata.json"
+    missing_metadata = (
+        client.app.state.model_repository.storage_path / "sensor_bad" / "gaussian" / "v1" / "metadata.json"
+    )
     missing_metadata.unlink()
 
     response = client.get("/models", params={"strict": "true"})

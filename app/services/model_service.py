@@ -141,7 +141,8 @@ class ModelService:
             series_id = str(index["series_id"])
             latest_version = str(index["latest_version"])
             try:
-                metadata = self.repository.load_metadata(series_id=series_id, version=latest_version)
+                detector = str(index.get("detector", "gaussian"))
+                metadata = self.repository.load_metadata(series_id=series_id, version=latest_version, detector=detector)
             except FileNotFoundError:
                 if strict:
                     raise MetadataIncompleteError(
