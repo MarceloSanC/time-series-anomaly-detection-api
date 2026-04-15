@@ -353,6 +353,8 @@ Rationale:
 
 ## STAGE D (P1) — Detector Comparison Benchmark Script
 
+Status: Completed
+
 ### Goal
 
 Provide a reproducible script to compare gaussian vs isolation forest detector behavior on the same dataset.
@@ -415,6 +417,8 @@ Rationale:
 
 ## STAGE E (P1) — Structured ML Logging for Operability
 
+Status: Completed
+
 ### Goal
 
 Emit ML-context-aware structured logs that are directly usable in log aggregation systems.
@@ -441,7 +445,8 @@ Rationale:
      - `event=prediction_served`
    - Include key ML fields:
      - train: `series_id`, `version`, `n_samples`, `mean`, `std`, `duration_ms`
-     - predict: `series_id`, `version`, `value`, `mean`, `upper_bound`, `lower_bound`, `is_anomaly`
+     - predict: `series_id`, `version`, `value`, `is_anomaly`, detector-specific decision fields
+       (e.g. gaussian: `mean`, `upper_bound`; isolation_forest: `score_threshold`)
 
 4. Compatibility and tests
    - Add unit tests for both logging modes:

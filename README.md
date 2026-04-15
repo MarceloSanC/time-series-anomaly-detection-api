@@ -237,6 +237,8 @@ Latest recorded run:
 | TPR | 100.00% | 100.00% |
 | FPR | 0.00% | 17.50% |
 | p50 latency (ms) | 3.80 | 31.98 |
+| p95 latency (ms) | 7.20 | 38.86 |
+| p99 latency (ms) | 9.04 | 81.89 |
 
 - Both detectors achieved 100% TPR on anomalies injected at mean+4.5*std.
 - Gaussian achieved 0% FPR; IsolationForest flagged 17.5% of normal points (higher FPR by design of its 10th-percentile threshold).
@@ -349,6 +351,63 @@ Use `.env` for real runtime values and keep it untracked.
 | `MIN_DATA_POINTS` | `30` | Minimum points required for training |
 | `STD_THRESHOLD` | `1e-10` | Minimum std threshold for constant-series rejection |
 | `MAX_LATENCY_SAMPLES` | `1000` | Sliding window size for latency percentiles |
+
+## Structured Logging
+
+The service supports two log output formats, controlled by the `LOG_FORMAT` environment variable.
+
+| Value | Behaviour |
+|---|---|
+| `text` (default) | Human-readable lines — `timestamp [request_id] LEVEL logger: message` |
+| `json` | One JSON object per line, suitable for log aggregation platforms (Datadog, Loki, CloudWatch) |
+
+Switch format at startup:
+
+```bash
+# local development (text, default)
+LOG_FORMAT=text make run
+
+# structured JSON output
+LOG_FORMAT=json .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Sample JSON log line emitted after a training request:
+
+```json
+{
+  "timestamp": "2026-04-15 18:00:00,123",
+  "level": "INFO",
+  "logger": "app.services.model_service",
+  "message": "Training completed",
+  "request_id": "4a3f1b2e-...",
+  "event": "model_trained",
+  "series_id": "sensor_XYZ",
+  "detector": "gaussian",
+  "version": "v1",
+  "n_samples": 150,
+  "duration_ms": 4.21,
+  "mean": 50.03,
+  "std": 4.97
+}
+```
+
+Recommended fields for filtering in external log platforms:
+
+| Field | Use case |
+|---|---|
+| `event` | Filter by operation type (`model_trained`, `prediction_served`) |
+| `series_id` | Trace all activity for a specific sensor/series |
+| `request_id` | Correlate all log lines for a single HTTP request |
+| `is_anomaly` | Alert on prediction decisions |
+| `detector` | Segment metrics by detector family |
+| `version` | Identify which model version served a prediction |
+
+Request-scoped summary logging checklist:
+
+- `/fit`: log `event=model_trained` with `series_id`, `detector`, `version`, `n_samples`, `duration_ms`, and gaussian params (`mean`, `std`) when applicable.
+- `/predict`: log `event=prediction_served` with `series_id`, `detector`, `version`, `value`, `is_anomaly`, and detector-specific decision fields (gaussian: `mean`, `upper_bound`; isolation_forest: `score_threshold`).
+- `/plot`: include `series_id`, resolved `version`, and outcome (`success` or `PLOT_DATA_UNAVAILABLE`) with request correlation.
+- `/models*`: include query context (`strict`, `detector`, `include_data`) and returned series/version scope for traceability.
 
 ## Documentation
 

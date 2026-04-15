@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     """Create and configure FastAPI application instance."""
-    setup_logging(settings.log_level)
+    setup_logging(settings.log_level, settings.log_format)
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
     @app.middleware("http")

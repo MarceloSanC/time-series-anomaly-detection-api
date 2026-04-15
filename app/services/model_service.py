@@ -93,7 +93,15 @@ class ModelService:
             )
             logger.info(
                 "Training completed",
-                extra={"series_id": series_id, "detector": detector_name, "version": version},
+                extra={
+                    "event": "model_trained",
+                    "series_id": series_id,
+                    "detector": detector_name,
+                    "version": version,
+                    "n_samples": metadata["n_samples"],
+                    "duration_ms": round(duration_ms, 2),
+                    **{k: v for k, v in model_params.items() if k in ("mean", "std")},
+                },
             )
 
             return TrainResponse(
@@ -123,6 +131,7 @@ class ModelService:
         logger.info(
             "Prediction completed",
             extra={
+                "event": "prediction_served",
                 "series_id": series_id,
                 "detector": detector_name,
                 "version": resolved_version,

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     app_host: str = Field(default="0.0.0.0")
     app_port: int = Field(default=8000)
     log_level: str = Field(default="INFO")
+    log_format: str = Field(default="text")
 
     storage_path: Path = Field(default=Path("storage"))
 
