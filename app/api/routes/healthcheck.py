@@ -64,7 +64,27 @@ def _aggregate_metrics(snapshot: dict[str, Any], prefix: str) -> HealthMetrics:
         "Metrics are in-memory only — tracked from process startup, not persisted across restarts — "
         "and are computed from all requests received by each endpoint since the service started."
     ),
-    responses={500: {"model": ErrorResponse, "description": "Unexpected internal error."}},
+    responses={
+        500: {
+            "model": ErrorResponse,
+            "description": "Unexpected internal error.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "internal_error": {
+                            "summary": "Unhandled exception",
+                            "value": {
+                                "error": "INTERNAL_ERROR",
+                                "message": "An unexpected internal error occurred",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        }
+                    }
+                }
+            },
+        }
+    },
 )
 def healthcheck(
     model_service: ModelService = Depends(get_model_service),

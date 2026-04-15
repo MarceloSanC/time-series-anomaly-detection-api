@@ -25,8 +25,53 @@ logger = logging.getLogger(__name__)
     summary="Render model training plot",
     description="Returns a PNG image with training points, mean line and ±3 sigma bounds.",
     responses={
-        404: {"model": ErrorResponse, "description": "Series or requested version not found."},
-        422: {"model": ErrorResponse, "description": "Plot data unavailable for selected model version."},
+        404: {
+            "model": ErrorResponse,
+            "description": "Series or requested version not found.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "series_not_found": {
+                            "summary": "Series does not exist",
+                            "value": {
+                                "error": "SERIES_NOT_FOUND",
+                                "message": "Series 'sensor_XYZ' not found",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        },
+                        "version_not_found_for_detector": {
+                            "summary": "Version missing in selected detector namespace",
+                            "value": {
+                                "error": "VERSION_NOT_FOUND_FOR_DETECTOR",
+                                "message": "Version 'v999' not found for series 'sensor_XYZ' detector 'gaussian'",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        422: {
+            "model": ErrorResponse,
+            "description": "Plot data unavailable for selected model version.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "plot_data_unavailable": {
+                            "summary": "Training data not persisted for this version",
+                            "value": {
+                                "error": "PLOT_DATA_UNAVAILABLE",
+                                "message": "Plot data not available for series 'sensor_XYZ' version 'v1'",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        }
+                    }
+                }
+            },
+        },
     },
 )
 def plot_series(
