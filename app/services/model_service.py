@@ -91,8 +91,8 @@ class ModelService:
                 series_id=series_id,
                 version=version,
                 n_samples=metadata["n_samples"],
-                mean=metadata["mean"],
-                std=metadata["std"],
+                detector="gaussian",
+                model_params={"mean": metadata["mean"], "std": metadata["std"]},
                 training_duration_ms=metadata["training_duration_ms"],
                 trained_at=metadata["trained_at"],
             )
@@ -123,8 +123,8 @@ class ModelService:
             is_anomaly=is_anomaly,
             value=data_point.value,
             timestamp=data_point.timestamp,
-            mean=float(model.mean),
-            upper_bound=upper_bound,
+            detector="gaussian",
+            model_params={"mean": float(model.mean), "upper_bound": upper_bound},
         )
 
     def list_series(self) -> list[dict[str, Any]]:
@@ -204,8 +204,8 @@ class ModelService:
         metadata = self.repository.load_metadata(series_id=series_id, version=resolved_version)
         payload: dict[str, Any] = {
             "version": resolved_version,
-            "mean": float(metadata["mean"]),
-            "std": float(metadata["std"]),
+            "detector": "gaussian",
+            "model_params": {"mean": float(metadata["mean"]), "std": float(metadata["std"])},
             "n_samples": int(metadata["n_samples"]),
             "trained_at": str(metadata["trained_at"]),
             "training_duration_ms": float(metadata["training_duration_ms"]),

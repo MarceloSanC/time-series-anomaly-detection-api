@@ -39,7 +39,7 @@ def test_train_returns_expected_payload_and_persists_model(tmp_path: Path) -> No
     assert response.series_id == "sensor_A"
     assert response.version == "v1"
     assert response.n_samples == 4
-    assert response.std > 0
+    assert response.model_params["std"] > 0
     assert response.training_duration_ms >= 0
     assert response.trained_at.endswith("Z")
 
@@ -61,8 +61,10 @@ def test_predict_uses_latest_version_by_default(tmp_path: Path) -> None:
     assert prediction.version == "v1"
     assert prediction.value == 99.0
     assert prediction.timestamp == 100
-    assert prediction.mean == pytest.approx(train_response.mean)
-    assert prediction.upper_bound == pytest.approx(train_response.mean + 3 * train_response.std)
+    assert prediction.model_params["mean"] == pytest.approx(train_response.model_params["mean"])
+    assert prediction.model_params["upper_bound"] == pytest.approx(
+        train_response.model_params["mean"] + 3 * train_response.model_params["std"]
+    )
     assert isinstance(prediction.is_anomaly, bool)
 
 
