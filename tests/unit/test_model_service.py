@@ -8,7 +8,8 @@ from app.domain.exceptions import (
     MetadataIncompleteError,
     PlotDataUnavailableError,
     SeriesNotFoundError,
-    VersionNotFoundError,
+    UnsupportedDetectorError,
+    VersionNotFoundForDetectorError,
 )
 from app.domain.models import AnomalyDetectionModel
 from app.domain.schemas import DataPoint, TimeSeries
@@ -97,8 +98,8 @@ def test_predict_raises_series_not_found(tmp_path: Path) -> None:
         service.predict(series_id="missing", data_point=DataPoint(timestamp=1, value=1.0))
 
 
-def test_predict_raises_version_not_found(tmp_path: Path) -> None:
-    """Raise VersionNotFoundError when requested version does not exist."""
+def test_predict_raises_version_not_found_for_detector_on_missing_version(tmp_path: Path) -> None:
+    """Raise VersionNotFoundForDetectorError when requested version does not exist."""
     repository = ModelRepository(storage_path=tmp_path)
     service = ModelService(
         repository=repository,
@@ -108,7 +109,7 @@ def test_predict_raises_version_not_found(tmp_path: Path) -> None:
 
     service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
 
-    with pytest.raises(VersionNotFoundError):
+    with pytest.raises(VersionNotFoundForDetectorError):
         service.predict(series_id="sensor_A", data_point=DataPoint(timestamp=1, value=5.0), version="v999")
 
 
@@ -349,3 +350,116 @@ def test_list_model_summaries_non_strict_skips_incomplete_series(tmp_path: Path)
 
     assert len(summaries) == 1
     assert summaries[0].series_id == "sensor_ok"
+
+
+def _varied_series(n: int = 100, seed: int = 42) -> TimeSeries:
+    """Return a normally-distributed series suitable for IsolationForest training."""
+    import random
+    rng = random.Random(seed)
+    values = [10.0 + rng.gauss(0, 0.5) for _ in range(n)]
+    return _series(values)
+
+
+def test_train_default_detector_is_gaussian(tmp_path: Path) -> None:
+    """train() with no detector argument must use gaussian and return correct model_params."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    response = service.train(series_id="sensor_A", data=_series([10.0, 11.0, 12.0, 13.0]))
+
+    assert response.detector == "gaussian"
+    assert response.model_params is not None
+    assert "mean" in response.model_params
+    assert "std" in response.model_params
+
+
+def test_train_isolation_forest_dispatches_correctly(tmp_path: Path) -> None:
+    """train(detector='isolation_forest') must store model and return score_threshold."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    response = service.train(series_id="sensor_A", data=_varied_series(), detector="isolation_forest")
+
+    assert response.detector == "isolation_forest"
+    assert response.model_params is not None
+    assert "score_threshold" in response.model_params
+    assert isinstance(response.model_params["score_threshold"], float)
+
+
+def test_predict_isolation_forest_returns_correct_model_params(tmp_path: Path) -> None:
+    """predict() for isolation_forest must return score_threshold in model_params."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    service.train(series_id="sensor_A", data=_varied_series(), detector="isolation_forest")
+    prediction = service.predict(
+        series_id="sensor_A",
+        data_point=DataPoint(timestamp=1700001000, value=10.1),
+        detector="isolation_forest",
+    )
+
+    assert prediction.detector == "isolation_forest"
+    assert prediction.model_params is not None
+    assert "score_threshold" in prediction.model_params
+    assert isinstance(prediction.is_anomaly, bool)
+
+
+def test_gaussian_and_isolation_forest_versions_are_independent(tmp_path: Path) -> None:
+    """Training both detectors on the same series must not share version state."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    g1 = service.train(series_id="sensor_A", data=_series([10.0, 11.0, 12.0]), detector="gaussian")
+    g2 = service.train(series_id="sensor_A", data=_series([13.0, 14.0, 15.0]), detector="gaussian")
+    iso1 = service.train(series_id="sensor_A", data=_varied_series(), detector="isolation_forest")
+
+    assert g1.version == "v1"
+    assert g2.version == "v2"
+    assert iso1.version == "v1"  # isolation_forest starts its own version sequence
+
+
+def test_train_raises_unsupported_detector_error(tmp_path: Path) -> None:
+    """train() must raise UnsupportedDetectorError before any repository call for unknown detectors."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    with pytest.raises(UnsupportedDetectorError):
+        service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]), detector="random_forest")  # type: ignore[arg-type]
+
+
+def test_predict_raises_unsupported_detector_error(tmp_path: Path) -> None:
+    """predict() must raise UnsupportedDetectorError before any repository call for unknown detectors."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    with pytest.raises(UnsupportedDetectorError):
+        service.predict(
+            series_id="sensor_A",
+            data_point=DataPoint(timestamp=1, value=1.0),
+            detector="random_forest",  # type: ignore[arg-type]
+        )
+
+
+def test_predict_raises_version_not_found_for_detector(tmp_path: Path) -> None:
+    """predict() must raise VersionNotFoundForDetectorError when requested version is missing."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
+
+    with pytest.raises(VersionNotFoundForDetectorError):
+        service.predict(series_id="sensor_A", data_point=DataPoint(timestamp=1, value=1.0), version="v999")

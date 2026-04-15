@@ -107,7 +107,7 @@ def test_predict_endpoint_rejects_invalid_series_id(client: TestClient) -> None:
 
 
 def test_predict_endpoint_returns_404_for_unknown_version(client: TestClient) -> None:
-    """Unknown explicit version should map to normalized VERSION_NOT_FOUND response."""
+    """Unknown explicit version should map to normalized VERSION_NOT_FOUND_FOR_DETECTOR response."""
     _train_baseline(client)
 
     response = client.post(
@@ -117,7 +117,7 @@ def test_predict_endpoint_returns_404_for_unknown_version(client: TestClient) ->
 
     assert response.status_code == 404
     payload = response.json()
-    assert payload["error"] == "VERSION_NOT_FOUND"
+    assert payload["error"] == "VERSION_NOT_FOUND_FOR_DETECTOR"
 
 
 def test_predict_endpoint_rejects_non_numeric_timestamp(client: TestClient) -> None:

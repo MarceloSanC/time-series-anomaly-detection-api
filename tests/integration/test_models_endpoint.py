@@ -175,7 +175,7 @@ def test_model_version_endpoint_include_data_returns_empty_list_for_legacy_metad
 
 
 def test_model_version_endpoint_returns_404_for_unknown_version(client: TestClient) -> None:
-    """Unknown model version should map to normalized VERSION_NOT_FOUND payload."""
+    """Unknown model version should map to normalized VERSION_NOT_FOUND_FOR_DETECTOR payload."""
     trained = client.post("/fit/sensor_versions", json=_fit_payload(start_timestamp=1, start_value=10.0))
     assert trained.status_code == 200
 
@@ -183,7 +183,7 @@ def test_model_version_endpoint_returns_404_for_unknown_version(client: TestClie
 
     assert response.status_code == 404
     payload = response.json()
-    assert payload["error"] == "VERSION_NOT_FOUND"
+    assert payload["error"] == "VERSION_NOT_FOUND_FOR_DETECTOR"
 
 
 def test_model_detail_data_quality_handles_zero_time_span(client: TestClient) -> None:
