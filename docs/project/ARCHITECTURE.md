@@ -160,7 +160,7 @@ def write_index_atomically(index_path: Path, data: dict) -> None:
 
 ## ARCHITECTURE EXTENSIONS (Post-Challenge Scope)
 
-> Section 11 is implemented as Stage C. Section 12 describes a planned modularization path.
+> Sections in this block cover extensions and planned evolution beyond the original challenge scope.
 
 ---
 
@@ -181,6 +181,22 @@ def write_index_atomically(index_path: Path, data: dict) -> None:
 **Why opt-in and not always-on:** These rules are outside the original challenge scope and target a specific deployment context. Always-on defaults would silently reject training data that is valid in non-industrial settings. See Section 11 for the flag mechanism.
 
 **Modularization trigger:** If sensor-quality rules exceed 3–4 rules, `ValidationService` should be split: a dedicated `SensorDataQualityValidator` handles domain-specific quality checks while `ValidationService` retains only structural integrity rules. The `TimeSeries` interface is the stable contract between them — no architectural rewrites required.
+
+---
+
+## 13. PRODUCTION EVOLUTION: streaming inference and industrial deployment
+
+**Streaming topology (planned):** `ModelService.predict()` is already stateless and accepts a single `DataPoint` — no changes to the service layer are required to migrate from synchronous HTTP to event-driven inference:
+
+```
+Sensor → Kafka (raw_sensor_data) → Consumer → ModelService.predict() → Kafka (anomaly_events)
+```
+
+The consumer replaces the HTTP route handler as the entry point. The service layer is transport-agnostic by design.
+
+**`series_id` → equipment mapping:** Each `series_id` maps to one sensor channel on one physical asset. A motor with three measurement axes would have three series: `motor_001_vibration_x`, `motor_001_vibration_y`, `motor_001_temperature`. The versioning and persistence model requires no changes for this mapping.
+
+**Latency optimization path:** At 1 Hz sensor sampling, the inference SLA is < 1000ms. The current p99 (~300ms on a local single-instance setup) is within budget for single-sensor alerting but tightens under multi-sensor fan-out. Optimization: pre-load the latest model version into `app.state` on startup, eliminating `joblib.load()` from the critical path. Expected p99 after in-memory caching: < 5ms.
 
 ---
 
