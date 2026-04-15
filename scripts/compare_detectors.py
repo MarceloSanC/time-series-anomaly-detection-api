@@ -218,11 +218,13 @@ def main() -> None:
     )
 
     detector_results: dict[str, Any] = {}
+    trained_versions: dict[str, str] = {}
 
     with httpx.Client() as client:
         for detector, series_id in _SERIES.items():
             print(f"\nFitting {detector} → series '{series_id}'...", flush=True)
             fit_resp = _fit(client, base_url, series_id, detector, train_ts, train_vals)
+            trained_versions[detector] = str(fit_resp["version"])
             print(f"  Trained: version={fit_resp['version']} points={fit_resp['points_used']}", flush=True)
 
             print(f"Evaluating {detector} ({len(test_vals)} predictions)...", flush=True)
@@ -250,9 +252,12 @@ def main() -> None:
         },
         "inspect": {
             "gaussian_plot": f"{base_url}/plot?series_id=compare_gaussian",
-            "gaussian_metadata": f"{base_url}/models/compare_gaussian/versions/v1",
+            "gaussian_metadata": (
+                f"{base_url}/models/compare_gaussian/versions/{trained_versions['gaussian']}"
+            ),
             "isolation_forest_data": (
-                f"{base_url}/models/compare_isolation_forest/versions/v1?include_data=true"
+                f"{base_url}/models/compare_isolation_forest/versions/"
+                f"{trained_versions['isolation_forest']}?include_data=true"
             ),
         },
         "detectors": detector_results,
