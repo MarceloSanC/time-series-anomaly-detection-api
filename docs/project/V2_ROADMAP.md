@@ -170,6 +170,8 @@ Data quality note:
 
 ## STAGE B (P0) — Multi-Detector Extensibility (Isolation Forest)
 
+Status: Completed
+
 ### Goal
 
 Enable multiple anomaly detectors in the same architecture while preserving backward compatibility with the default gaussian detector.
@@ -222,9 +224,20 @@ Rationale:
 - Both detector families coexist for same `series_id` without interference.
 - `pytest -v` passes.
 
+### Validation Evidence
+
+- Implemented via [MULTI_DETECTOR_PLAN](MULTI_DETECTOR_PLAN.md) (5 phases: domain → repository → service → API → docs).
+- `?detector=` supported on `/fit`, `/predict`, and all `/models*` endpoints (exceeds Stage B scope).
+- Detector-scoped storage layout: `storage/{series_id}/{detector}/{version}/`.
+- Normalized errors: `422 UNSUPPORTED_DETECTOR`, `404 VERSION_NOT_FOUND_FOR_DETECTOR`.
+- Test suite: unit + integration coverage for both detectors, coexistence, and error cases.
+- `pytest -v` passing with 99%+ coverage.
+
 ---
 
 ## STAGE C (P1) — Industrial Sensor Validation Extensions
+
+Status: Completed
 
 ### Goal
 
@@ -328,6 +341,14 @@ Rationale:
   route or schema file.
 - `pytest -v` passes.
 
+### Validation Evidence
+
+- Rules implemented in `app/services/validation_service.py` (Rules 6–7), disabled by default.
+- Config flags: `FLAT_LINE_ENABLED=false`, `TEMPORAL_GAP_ENABLED=false` in `.env.example`.
+- Error codes registered in `VALIDATION_ERROR_CODE_MAP`: `FLAT_LINE_DETECTED`, `TEMPORAL_GAP_DETECTED`.
+- Unit tests injected via `ValidationService(...)` constructor — no config patching.
+- `pytest -v` passing with 99%+ coverage.
+
 ---
 
 ## STAGE D (P1) — Detector Comparison Benchmark Script
@@ -377,6 +398,18 @@ Rationale:
 ```bash
 .venv/bin/python scripts/compare_detectors.py
 ```
+
+### Conclusions
+
+- Gaussian is expected to outperform IsolationForest on gaussian-distributed datasets.
+  The Gaussian detector is a parametric model calibrated to the exact distribution of the
+  synthetic data (mean/std threshold), while IsolationForest is a general-purpose density
+  estimator that does not exploit distributional structure. Additionally, IsolationForest's
+  threshold is set at the 10th percentile of training scores, which flags ~10% of normal
+  points as anomalies (higher FPR), whereas the Gaussian 3-sigma bound flags ~0.13%.
+  IsolationForest holds the advantage in non-gaussian, multimodal, or clustered-anomaly
+  scenarios, and is the only option for detecting negative outliers (below the mean), which
+  the Gaussian detector ignores by design.
 
 ---
 

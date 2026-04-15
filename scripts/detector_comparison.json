@@ -1,0 +1,55 @@
+{
+  "generated_at": "2026-04-15T21:29:50.867034Z",
+  "dataset": {
+    "description": "Synthetic industrial sensor data: gaussian-distributed normal samples (mean=50.0, std=5.0, n_train=150) with positive spike anomalies injected at mean+4.5*std in the test split.",
+    "n_train": 150,
+    "n_test": 60,
+    "n_anomalies_in_test": 20,
+    "anomaly_injection": "mean + 4.5 * std",
+    "rng_seed": 42
+  },
+  "inspect": {
+    "gaussian_plot": "http://localhost:8000/plot?series_id=compare_gaussian",
+    "gaussian_metadata": "http://localhost:8000/models/compare_gaussian/versions/v1",
+    "isolation_forest_data": "http://localhost:8000/models/compare_isolation_forest/versions/v1?include_data=true"
+  },
+  "detectors": {
+    "gaussian": {
+      "series_id": "compare_gaussian",
+      "n_train": 150,
+      "n_test": 60,
+      "n_anomalies_in_test": 20,
+      "true_positives": 20,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "true_negatives": 40,
+      "tpr": 1.0,
+      "fpr": 0.0,
+      "latency_ms": {
+        "p50": 3.7981,
+        "p95": 7.1981,
+        "p99": 9.0357,
+        "avg": 4.2151
+      }
+    },
+    "isolation_forest": {
+      "series_id": "compare_isolation_forest",
+      "n_train": 150,
+      "n_test": 60,
+      "n_anomalies_in_test": 20,
+      "true_positives": 20,
+      "false_positives": 7,
+      "false_negatives": 0,
+      "true_negatives": 33,
+      "tpr": 1.0,
+      "fpr": 0.175,
+      "latency_ms": {
+        "p50": 31.9824,
+        "p95": 38.8621,
+        "p99": 81.8868,
+        "avg": 34.1507
+      }
+    }
+  },
+  "conclusion": "gaussian achieves higher TPR; gaussian achieves lower FPR; gaussian is faster at p50 on this run. Gaussian detects only positive outliers (value > mean + 3*std) by design; anomalies are injected above mean + 4.5*std so both detectors compete fairly. IsolationForest requires sufficient training variance to avoid the masking effect (low-variance training data causes all points to score similarly). Latency includes HTTP round-trip overhead and is comparable between detectors but does not reflect pure algorithmic inference cost."
+}

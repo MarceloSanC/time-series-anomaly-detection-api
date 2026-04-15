@@ -178,19 +178,25 @@ Example output:
 
 The image shows training points (scatter), the model mean, and upper/lower 3-sigma thresholds.
 
-## Benchmark
+## Analysis Scripts
 
-Run V1 Stage 4 benchmark (100 parallel inference requests):
+Three standalone scripts cover latency benchmarking, detector quality comparison, and concept drift analysis. All output JSON artifacts to `scripts/` and require the service running at `http://localhost:8000`.
+
+---
+
+### Benchmark — inference latency under parallel load
+
+Measures p50/p95/p99 latency and throughput under 100 concurrent prediction requests.
 
 ```bash
-make benchmark
+make benchmark                                        # gaussian default
 python scripts/benchmark.py --detector isolation_forest
-python scripts/benchmark.py --both-detectors
+python scripts/benchmark.py --both-detectors          # saves combined JSON
 ```
 
-Benchmark output is saved to `scripts/benchmark_results.json`.
+Output saved to `scripts/benchmark_results.json`.
 
-Latest recorded run (`python scripts/benchmark.py --both-detectors`):
+Latest recorded run (`--both-detectors`):
 
 | Metric | Gaussian | Isolation Forest |
 |---|---:|---:|
@@ -203,10 +209,67 @@ Latest recorded run (`python scripts/benchmark.py --both-detectors`):
 | throughput (req/s) | 250.80 | 292.95 |
 | total duration (s) | 0.40 | 0.34 |
 
-Brief comparison:
-- In this run, `isolation_forest` was faster than `gaussian` across p50/p95/p99 and average latency.
-- Throughput was also higher for `isolation_forest` (+42.14 req/s, about +16.8%).
-- Results are environment-sensitive (local machine/load), so compare trends across repeated runs.
+- `isolation_forest` was faster across all percentiles in this run (+42 req/s, ~+17% throughput).
+- Results are environment-sensitive; compare trends across repeated runs rather than absolute values.
+
+---
+
+### Detector Comparison — detection quality on synthetic anomalies
+
+Trains both detectors via the API on the same gaussian-distributed dataset (150 points, mean=50, std=5), then evaluates on a held-out test split with 20 positive spike anomalies injected at mean+4.5*std. Models are persisted after the run.
+
+```bash
+.venv/bin/python scripts/compare_detectors.py
+```
+
+Output saved to `scripts/detector_comparison.json`. After the run, the gaussian training data can be visualized:
+
+```bash
+curl "http://localhost:8000/plot?series_id=compare_gaussian" --output compare_plot.png
+```
+
+![Gaussian training data with mean and ±3σ bounds](docs/assets/compare_plot.png)
+
+Latest recorded run:
+
+| Metric | Gaussian | Isolation Forest |
+|---|---:|---:|
+| TPR | 100.00% | 100.00% |
+| FPR | 0.00% | 17.50% |
+| p50 latency (ms) | 3.80 | 31.98 |
+
+- Both detectors achieved 100% TPR on anomalies injected at mean+4.5*std.
+- Gaussian achieved 0% FPR; IsolationForest flagged 17.5% of normal points (higher FPR by design of its 10th-percentile threshold).
+- This result is expected on gaussian-distributed data — the gaussian detector is a parametric fit to the exact distribution. IsolationForest holds the advantage on non-gaussian, multimodal, or clustered-anomaly scenarios, and is the only option for detecting negative outliers.
+- Latency includes HTTP round-trip and is comparable between detectors, not a measure of pure algorithmic cost.
+
+---
+
+### Drift Analysis — concept drift behavior over time
+
+Simulates 6 hours of sensor data with gradual mean drift starting at hour 1, and compares a static threshold (trained on healthy baseline) against a rolling-window adaptive threshold.
+
+```bash
+.venv/bin/python scripts/drift_analysis.py
+```
+
+Output saved to `scripts/drift_analysis_results.json`. Three plots are generated under `docs/assets/`.
+
+![Time series with drift and anomaly markers](docs/assets/drift_analysis_timeseries.png)
+
+![Hourly FPR: baseline vs rolling window](docs/assets/drift_analysis_fpr_hourly.png)
+
+Latest recorded run:
+
+| Metric | Static Baseline | Rolling Window |
+|---|---:|---:|
+| FPR (overall) | 52.32% | 0.019% |
+| Alerts/hour | 1892.8 | 20.3 |
+| Time to instability | 3h | — (stable) |
+
+- The static threshold becomes unreliable after drift begins (~hour 1), saturating at 52% FPR by hour 3.
+- The rolling window adapts continuously, keeping FPR near zero throughout the drift window.
+- FPR reduction: ~280,875× relative to static baseline.
 
 ## Known Limitations
 
