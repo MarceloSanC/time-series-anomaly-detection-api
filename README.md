@@ -269,7 +269,7 @@ Use `.env` for real runtime values and keep it untracked.
 - [Docs Index](docs/README.md)
 - [Roadmap](docs/project/ROADMAP.md)
 - [Architecture](docs/project/ARCHITECTURE.md)
-- [Modeling Notes](docs/project/MODELING_NOTES.md)
+- [Modeling Notes](docs/project/MODEL_DESIGN_NOTES.md)
 - [AI Usage](docs/ai/LLM_USAGE.md)
 - [Git Protocol](docs/process/GIT_PROTOCOL.md)
 - API live docs: `/docs` (Swagger UI) e `/redoc` (ReDoc)
