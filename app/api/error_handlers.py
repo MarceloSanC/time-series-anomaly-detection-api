@@ -18,8 +18,10 @@ from app.domain.exceptions import (
     PlotDataUnavailableError,
     SeriesNotFoundError,
     TemporalGapDetectedError,
+    UnsupportedDetectorError,
     ValidationServiceError,
     VersionNotFoundError,
+    VersionNotFoundForDetectorError,
     UnorderedTimestampsError,
 )
 
@@ -84,6 +86,24 @@ def register_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=400,
             content=_error_payload(error="INVALID_SERIES_ID", message=str(exc)),
+        )
+
+    @app.exception_handler(UnsupportedDetectorError)
+    async def handle_unsupported_detector(_: Request, exc: UnsupportedDetectorError) -> JSONResponse:
+        """Translate unsupported detector type into HTTP 422 response."""
+        logger.warning("Unsupported detector", extra={"error": str(exc)})
+        return JSONResponse(
+            status_code=422,
+            content=_error_payload(error="UNSUPPORTED_DETECTOR", message=str(exc)),
+        )
+
+    @app.exception_handler(VersionNotFoundForDetectorError)
+    async def handle_version_not_found_for_detector(_: Request, exc: VersionNotFoundForDetectorError) -> JSONResponse:
+        """Translate missing version for a detector into HTTP 404 response."""
+        logger.warning("Version not found for detector", extra={"error": str(exc)})
+        return JSONResponse(
+            status_code=404,
+            content=_error_payload(error="VERSION_NOT_FOUND_FOR_DETECTOR", message=str(exc)),
         )
 
     @app.exception_handler(PlotDataUnavailableError)

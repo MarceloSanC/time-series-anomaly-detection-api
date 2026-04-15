@@ -24,9 +24,15 @@ async def _train_series(
     base_url: str,
     series_id: str,
     n_points: int,
+    detector: str,
 ) -> dict[str, Any]:
     payload = _build_training_payload(n_points=n_points)
-    response = await client.post(f"{base_url}/fit/{series_id}", json=payload, timeout=30.0)
+    response = await client.post(
+        f"{base_url}/fit/{series_id}",
+        params={"detector": detector},
+        json=payload,
+        timeout=30.0,
+    )
     response.raise_for_status()
     return response.json()
 
@@ -37,11 +43,13 @@ async def _predict_once(
     series_id: str,
     timestamp: int,
     value: float,
+    detector: str,
 ) -> float:
     """Perform one prediction request and return request latency in milliseconds."""
     started = perf_counter()
     response = await client.post(
         f"{base_url}/predict/{series_id}",
+        params={"detector": detector},
         json={"timestamp": str(timestamp), "value": value},
         timeout=30.0,
     )
@@ -67,6 +75,7 @@ async def run_benchmark(
     series_id: str,
     n_train_points: int,
     n_requests: int,
+    detector: str,
     output_path: Path,
 ) -> dict[str, Any]:
     """Train baseline model and benchmark parallel inference latency/throughput."""
@@ -76,6 +85,7 @@ async def run_benchmark(
             base_url=base_url,
             series_id=series_id,
             n_points=n_train_points,
+            detector=detector,
         )
 
         prediction_timestamp_base = 1_800_000_000
@@ -89,6 +99,7 @@ async def run_benchmark(
                 series_id=series_id,
                 timestamp=prediction_timestamp_base + idx,
                 value=prediction_value,
+                detector=detector,
             )
             for idx in range(n_requests)
         ]
@@ -103,6 +114,7 @@ async def run_benchmark(
         "target": {
             "base_url": base_url,
             "series_id": series_id,
+            "detector": detector,
             "trained_version": train_response.get("version"),
         },
         "workload": {
@@ -125,6 +137,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--base-url", default="http://localhost:8000", help="API base URL.")
     parser.add_argument("--series-id", default="sensor_benchmark", help="Series id to train and benchmark.")
+    parser.add_argument(
+        "--detector",
+        default="gaussian",
+        choices=("gaussian", "isolation_forest"),
+        help="Detector used in fit/predict benchmark path.",
+    )
+    parser.add_argument(
+        "--both-detectors",
+        action="store_true",
+        help="Benchmark gaussian and isolation_forest sequentially and save combined output.",
+    )
     parser.add_argument(
         "--n-train-points",
         type=int,
@@ -153,12 +176,31 @@ def main() -> None:
     if args.n_requests <= 0:
         raise SystemExit("n_requests must be greater than 0")
 
+    if args.both_detectors:
+        results: dict[str, Any] = {"generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"), "runs": {}}
+        for detector_name in ("gaussian", "isolation_forest"):
+            run_result = asyncio.run(
+                run_benchmark(
+                    base_url=args.base_url.rstrip("/"),
+                    series_id=f"{args.series_id}_{detector_name}",
+                    n_train_points=args.n_train_points,
+                    n_requests=args.n_requests,
+                    detector=detector_name,
+                    output_path=args.output,
+                )
+            )
+            results["runs"][detector_name] = run_result
+        args.output.write_text(json.dumps(results, indent=2, ensure_ascii=True), encoding="utf-8")
+        print(json.dumps(results, indent=2, ensure_ascii=True))
+        return
+
     result = asyncio.run(
         run_benchmark(
             base_url=args.base_url.rstrip("/"),
             series_id=args.series_id,
             n_train_points=args.n_train_points,
             n_requests=args.n_requests,
+            detector=args.detector,
             output_path=args.output,
         )
     )

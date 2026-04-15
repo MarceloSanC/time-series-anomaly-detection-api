@@ -355,6 +355,7 @@ Rationale:
      - false positive rate
      - inference latency (`p50`, `p95`, `p99`)
    - Add short conclusion field summarizing tradeoffs.
+   - Note: IsolationForest is sensitive to low-variance training data (masking effect) — the synthetic dataset must have sufficient variance for a fair comparison.
 
 3. Artifact output
    - Save results to `scripts/detector_comparison.json`.

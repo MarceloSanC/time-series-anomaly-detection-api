@@ -4,8 +4,15 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8000}"
 SERIES_ID="${SERIES_ID:-sensor_XYZ}"
+DETECTOR="${DETECTOR:-}"
 
-curl --fail-with-body -sS -X POST "${BASE_URL}/fit/${SERIES_ID}" \
+if [[ -n "${DETECTOR}" ]]; then
+  URL="${BASE_URL}/fit/${SERIES_ID}?detector=${DETECTOR}"
+else
+  URL="${BASE_URL}/fit/${SERIES_ID}"
+fi
+
+curl --fail-with-body -sS -X POST "${URL}" \
   -H "Content-Type: application/json" \
   -d '{
     "timestamps": [

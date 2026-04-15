@@ -1,6 +1,8 @@
-from typing import Optional, Sequence
+from typing import Any, Literal, Optional, Sequence
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+DetectorType = Literal["gaussian", "isolation_forest"]
 
 
 class DataPoint(BaseModel):
@@ -22,8 +24,8 @@ class TrainResponse(BaseModel):
     series_id: str
     version: str
     n_samples: int
-    mean: float
-    std: float
+    detector: DetectorType = "gaussian"
+    model_params: Optional[dict[str, Any]] = None
     training_duration_ms: float
     trained_at: str
 
@@ -36,14 +38,15 @@ class PredictionResponse(BaseModel):
     is_anomaly: bool
     value: float
     timestamp: int
-    mean: float
-    upper_bound: float
+    detector: DetectorType = "gaussian"
+    model_params: Optional[dict[str, Any]] = None
 
 
 class ModelInfo(BaseModel):
     """Summary metadata for a trained time-series model lineage."""
 
     series_id: str
+    detector: DetectorType = "gaussian"
     latest_version: str
     versions: list[str]
     trained_at: str
@@ -54,8 +57,8 @@ class DataQualityReport(BaseModel):
     """Derived training-data quality indicators for a model lineage."""
 
     n_samples: int
-    mean: float
-    std: float
+    mean: Optional[float] = None
+    std: Optional[float] = None
     min_value: float
     max_value: float
     time_span_seconds: int
@@ -66,6 +69,7 @@ class ModelSummary(BaseModel):
     """Compact per-series summary used by the `/models` list endpoint."""
 
     series_id: str
+    detector: DetectorType = "gaussian"
     latest_version: str
     n_samples: int
     trained_at: str
@@ -75,6 +79,7 @@ class ModelDetail(BaseModel):
     """Detailed per-series payload used by the `/models/{series_id}` endpoint."""
 
     series_id: str
+    detector: DetectorType = "gaussian"
     latest_version: str
     versions: list[str]
     trained_at: str
@@ -99,9 +104,11 @@ class MetadataTrainingPoint(BaseModel):
 class ModelVersionMetadata(BaseModel):
     """Version-level metadata response for model introspection endpoints."""
 
+    model_config = ConfigDict(protected_namespaces=())
+
     version: str
-    mean: float
-    std: float
+    detector: DetectorType = "gaussian"
+    model_params: Optional[dict[str, Any]] = None
     n_samples: int
     trained_at: str
     training_duration_ms: float

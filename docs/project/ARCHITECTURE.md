@@ -10,7 +10,8 @@ For model-focused failure analysis and detector evolution paths, see
 
 ## 1. PERSISTENCE: joblib on local filesystem
 
-**Decision:** Store models as `joblib` files under `storage/{series_id}/{version}/model.joblib`.
+**Decision:** Store models as `joblib` files under detector-scoped paths:
+`storage/{series_id}/{detector}/{version}/model.joblib`.
 
 **Alternatives considered:**
 - SQLite with BLOB storage — adds a dependency, harder to inspect manually, no real benefit for this scale
@@ -24,6 +25,7 @@ For model-focused failure analysis and detector evolution paths, see
 **Rules:**
 - Always use `joblib.dump` / `joblib.load`, never `pickle` directly
 - Store metadata separately in `metadata.json` so models can be inspected without deserialization
+- Keep one `index.json` per `(series_id, detector)` namespace
 - Always write `index.json` atomically (write-then-rename)
 
 ---
@@ -49,7 +51,8 @@ The FastAPI event loop is async, but training and I/O in this service are short 
 
 ## 3. VERSIONING: incremental string versions
 
-**Decision:** Versions are strings `v1`, `v2`, `v3`. An `index.json` file per series tracks the list and latest pointer.
+**Decision:** Versions are strings `v1`, `v2`, `v3`, scoped per detector namespace.
+An `index.json` file per `(series_id, detector)` tracks the list and latest pointer.
 
 **Alternatives considered:**
 - Timestamp-based versions (e.g., `2024-01-15T10:30:00Z`) — hard to reference in URLs, no natural ordering guarantees
@@ -197,6 +200,22 @@ The consumer replaces the HTTP route handler as the entry point. The service lay
 **`series_id` → equipment mapping:** Each `series_id` maps to one sensor channel on one physical asset. A motor with three measurement axes would have three series: `motor_001_vibration_x`, `motor_001_vibration_y`, `motor_001_temperature`. The versioning and persistence model requires no changes for this mapping.
 
 **Latency optimization path:** At 1 Hz sensor sampling, the inference SLA is < 1000ms. The current p99 (~300ms on a local single-instance setup) is within budget for single-sensor alerting but tightens under multi-sensor fan-out. Optimization: pre-load the latest model version into `app.state` on startup, eliminating `joblib.load()` from the critical path. Expected p99 after in-memory caching: < 5ms.
+
+---
+
+## 14. MULTI-DETECTOR API CONTRACT (Additive Extension)
+
+**Decision:** `/fit`, `/predict`, and `/models*` accept optional `?detector=`.
+When omitted, the system resolves within `gaussian` namespace by default.
+
+**Supported detector values:** `gaussian`, `isolation_forest`
+
+**Error normalization:** invalid detector values return `422 UNSUPPORTED_DETECTOR`.
+Version lookups that miss within selected detector namespace return
+`404 VERSION_NOT_FOUND_FOR_DETECTOR`.
+
+**Compatibility note:** this is additive behavior layered on top of the original challenge API.
+Core request/response contracts remain backward-compatible for callers that omit `?detector=`.
 
 ---
 

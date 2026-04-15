@@ -35,7 +35,8 @@ def test_models_endpoint_lists_multiple_series_summaries(client: TestClient) -> 
     assert len(payload) == 2
     series_ids = sorted(item["series_id"] for item in payload)
     assert series_ids == ["sensor_A", "sensor_B"]
-    assert all(set(item.keys()) == {"series_id", "latest_version", "n_samples", "trained_at"} for item in payload)
+    assert all(set(item.keys()) == {"series_id", "detector", "latest_version", "n_samples", "trained_at"} for item in payload)
+    assert all(item["detector"] == "gaussian" for item in payload)
 
 
 def test_models_endpoint_tolerates_incomplete_metadata_by_default(client: TestClient) -> None:
@@ -45,7 +46,9 @@ def test_models_endpoint_tolerates_incomplete_metadata_by_default(client: TestCl
     assert valid.status_code == 200
     assert invalid.status_code == 200
 
-    missing_metadata = client.app.state.model_repository.storage_path / "sensor_bad" / "v1" / "metadata.json"
+    missing_metadata = (
+        client.app.state.model_repository.storage_path / "sensor_bad" / "gaussian" / "v1" / "metadata.json"
+    )
     missing_metadata.unlink()
 
     response = client.get("/models")
@@ -62,7 +65,9 @@ def test_models_endpoint_strict_mode_returns_422_for_incomplete_metadata(client:
     assert valid.status_code == 200
     assert invalid.status_code == 200
 
-    missing_metadata = client.app.state.model_repository.storage_path / "sensor_bad" / "v1" / "metadata.json"
+    missing_metadata = (
+        client.app.state.model_repository.storage_path / "sensor_bad" / "gaussian" / "v1" / "metadata.json"
+    )
     missing_metadata.unlink()
 
     response = client.get("/models", params={"strict": "true"})
@@ -83,6 +88,7 @@ def test_model_detail_endpoint_returns_expected_payload_with_data_quality(client
     assert response.status_code == 200
     payload = response.json()
     assert payload["series_id"] == "sensor_detail"
+    assert payload["detector"] == "gaussian"
     assert payload["latest_version"] == "v1"
     assert payload["versions"] == ["v1"]
     assert payload["n_samples"] == 40
@@ -120,6 +126,7 @@ def test_model_version_endpoint_returns_summary_without_training_data_by_default
     assert response.status_code == 200
     payload = response.json()
     assert payload["version"] == "v1"
+    assert payload["detector"] == "gaussian"
     assert "training_data" not in payload
 
 
@@ -167,11 +174,12 @@ def test_model_version_endpoint_include_data_returns_empty_list_for_legacy_metad
 
     assert response.status_code == 200
     payload = response.json()
+    assert payload["detector"] == "gaussian"
     assert payload["training_data"] == []
 
 
 def test_model_version_endpoint_returns_404_for_unknown_version(client: TestClient) -> None:
-    """Unknown model version should map to normalized VERSION_NOT_FOUND payload."""
+    """Unknown model version should map to normalized VERSION_NOT_FOUND_FOR_DETECTOR payload."""
     trained = client.post("/fit/sensor_versions", json=_fit_payload(start_timestamp=1, start_value=10.0))
     assert trained.status_code == 200
 
@@ -179,7 +187,7 @@ def test_model_version_endpoint_returns_404_for_unknown_version(client: TestClie
 
     assert response.status_code == 404
     payload = response.json()
-    assert payload["error"] == "VERSION_NOT_FOUND"
+    assert payload["error"] == "VERSION_NOT_FOUND_FOR_DETECTOR"
 
 
 def test_model_detail_data_quality_handles_zero_time_span(client: TestClient) -> None:
@@ -219,3 +227,84 @@ def test_model_detail_data_quality_handles_zero_time_span(client: TestClient) ->
     quality = response.json()["data_quality"]
     assert quality["time_span_seconds"] == 0
     assert quality["points_per_second"] == 3.0
+
+
+def test_models_endpoints_can_scope_by_detector_for_same_series(client: TestClient) -> None:
+    """`/models*` endpoints should return detector-scoped data when query param is provided."""
+    gaussian_fit = client.post("/fit/sensor_dual", json=_fit_payload(start_timestamp=1, start_value=10.0))
+    iso_fit = client.post(
+        "/fit/sensor_dual?detector=isolation_forest",
+        json=_fit_payload(start_timestamp=1001, start_value=20.0),
+    )
+    assert gaussian_fit.status_code == 200
+    assert iso_fit.status_code == 200
+    assert gaussian_fit.json()["version"] == "v1"
+    assert iso_fit.json()["version"] == "v1"
+
+    list_gaussian = client.get("/models", params={"detector": "gaussian"})
+    list_isolation = client.get("/models", params={"detector": "isolation_forest"})
+    assert list_gaussian.status_code == 200
+    assert list_isolation.status_code == 200
+    assert any(item["series_id"] == "sensor_dual" and item["detector"] == "gaussian" for item in list_gaussian.json())
+    assert any(
+        item["series_id"] == "sensor_dual" and item["detector"] == "isolation_forest"
+        for item in list_isolation.json()
+    )
+
+    detail_gaussian = client.get("/models/sensor_dual", params={"detector": "gaussian"})
+    detail_isolation = client.get("/models/sensor_dual", params={"detector": "isolation_forest"})
+    assert detail_gaussian.status_code == 200
+    assert detail_isolation.status_code == 200
+    assert detail_gaussian.json()["detector"] == "gaussian"
+    assert detail_isolation.json()["detector"] == "isolation_forest"
+
+    version_gaussian = client.get("/models/sensor_dual/versions/v1", params={"detector": "gaussian"})
+    version_isolation = client.get("/models/sensor_dual/versions/v1", params={"detector": "isolation_forest"})
+    assert version_gaussian.status_code == 200
+    assert version_isolation.status_code == 200
+    assert version_gaussian.json()["detector"] == "gaussian"
+    assert version_isolation.json()["detector"] == "isolation_forest"
+
+
+def test_models_endpoint_without_detector_returns_all_detector_namespaces(client: TestClient) -> None:
+    """Default `/models` response should include both detector namespaces when both exist."""
+    fit_gaussian = client.post("/fit/sensor_dual", json=_fit_payload(start_timestamp=1, start_value=10.0))
+    fit_isolation = client.post(
+        "/fit/sensor_dual?detector=isolation_forest",
+        json=_fit_payload(start_timestamp=1001, start_value=20.0),
+    )
+    assert fit_gaussian.status_code == 200
+    assert fit_isolation.status_code == 200
+
+    response = client.get("/models")
+
+    assert response.status_code == 200
+    payload = response.json()
+    pair_set = {(item["series_id"], item["detector"]) for item in payload}
+    assert ("sensor_dual", "gaussian") in pair_set
+    assert ("sensor_dual", "isolation_forest") in pair_set
+
+
+def test_models_endpoints_return_422_for_unsupported_detector(client: TestClient) -> None:
+    """Unsupported detector should map to UNSUPPORTED_DETECTOR for `/models*` routes."""
+    for path in (
+        "/models?detector=random_forest",
+        "/models/sensor_X?detector=random_forest",
+        "/models/sensor_X/versions/v1?detector=random_forest",
+    ):
+        response = client.get(path)
+        assert response.status_code == 422
+        payload = response.json()
+        assert payload["error"] == "UNSUPPORTED_DETECTOR"
+        assert "is not supported" in payload["message"]
+        assert "timestamp" in payload
+
+
+def test_models_endpoints_reject_case_variant_detector_value(client: TestClient) -> None:
+    """Detector values should remain case-sensitive across `/models*` endpoints."""
+    response = client.get("/models?detector=Gaussian")
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["error"] == "UNSUPPORTED_DETECTOR"
+    assert "Gaussian" in payload["message"]

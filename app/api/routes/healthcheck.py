@@ -59,7 +59,11 @@ def _aggregate_metrics(snapshot: dict[str, Any], prefix: str) -> HealthMetrics:
     "/healthcheck",
     response_model=HealthcheckResponse,
     summary="Service health and latency snapshot",
-    description="Returns trained-series count and aggregated latency metrics for training and prediction endpoints.",
+    description=(
+        "Returns the count of trained series and aggregated latency metrics for training and prediction endpoints. "
+        "Metrics are in-memory only — tracked from process startup, not persisted across restarts — "
+        "and are computed from all requests received by each endpoint since the service started."
+    ),
     responses={500: {"model": ErrorResponse, "description": "Unexpected internal error."}},
 )
 def healthcheck(

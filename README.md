@@ -12,6 +12,7 @@ The service:
 ## Architecture Overview
 
 Each `series_id` keeps an independent model lineage. Retraining creates a new version without overwriting previous versions. Predictions default to latest version, but support explicit historical versions via `?version=`.
+Detector selection is optional via `?detector=` (`gaussian` default, `isolation_forest` available).
 
 Concurrent training is parallel across different `series_id` values and serialized for the same `series_id` using per-series locking.
 
@@ -81,8 +82,21 @@ docker compose logs -f api
 
 Train:
 
+Script (detector default `gaussian`):
+
 ```bash
 ./scripts/examples/fit_request.sh
+```
+
+Script (detector explicito `isolation_forest`):
+
+```bash
+DETECTOR=isolation_forest ./scripts/examples/fit_request.sh
+```
+
+`curl` equivalente:
+
+```bash
 curl --fail-with-body -sS -X POST "http://localhost:8000/fit/sensor_XYZ" \
   -H "Content-Type: application/json" \
   --data-binary @- <<'JSON'
@@ -112,6 +126,7 @@ Predict:
 ```bash
 ./scripts/examples/predict_request.sh
 VERSION_QUERY=v1 ./scripts/examples/predict_request.sh
+DETECTOR=isolation_forest ./scripts/examples/predict_request.sh
 curl --fail-with-body -sS -X POST "http://localhost:8000/predict/sensor_XYZ?version=v1" \
   -H "Content-Type: application/json" \
   -d '{"timestamp":"1700000100","value":99.0}'
@@ -139,11 +154,16 @@ curl --fail-with-body -sS "http://localhost:8000/models"
 # Strict mode: fail-fast if any latest metadata is incomplete
 curl --fail-with-body -sS "http://localhost:8000/models?strict=true"
 
+# Detector-scoped list
+curl --fail-with-body -sS "http://localhost:8000/models?detector=isolation_forest"
+
 # Series detail with derived data_quality
 curl --fail-with-body -sS "http://localhost:8000/models/sensor_XYZ"
+curl --fail-with-body -sS "http://localhost:8000/models/sensor_XYZ?detector=isolation_forest"
 
 # Version metadata summary (training_data excluded by default)
 curl --fail-with-body -sS "http://localhost:8000/models/sensor_XYZ/versions/v1"
+curl --fail-with-body -sS "http://localhost:8000/models/sensor_XYZ/versions/v1?detector=isolation_forest"
 
 # Version metadata including persisted training_data
 curl --fail-with-body -sS "http://localhost:8000/models/sensor_XYZ/versions/v1?include_data=true"
@@ -160,31 +180,33 @@ The image shows training points (scatter), the model mean, and upper/lower 3-sig
 
 ## Benchmark
 
-Run Stage 4 benchmark (100 parallel inference requests):
+Run V1 Stage 4 benchmark (100 parallel inference requests):
 
 ```bash
 make benchmark
+python scripts/benchmark.py --detector isolation_forest
+python scripts/benchmark.py --both-detectors
 ```
 
 Benchmark output is saved to `scripts/benchmark_results.json`.
 
-Latest recorded run:
+Latest recorded run (`python scripts/benchmark.py --both-detectors`):
 
-| Metric | Value |
-|---|---:|
-| p50 (ms) | 243.66 |
-| p95 (ms) | 308.60 |
-| p99 (ms) | 311.94 |
-| avg (ms) | 225.00 |
-| min (ms) | 21.44 |
-| max (ms) | 312.26 |
-| throughput (req/s) | 306.92 |
-| total duration (s) | 0.33 |
+| Metric | Gaussian | Isolation Forest |
+|---|---:|---:|
+| p50 (ms) | 291.53 | 249.64 |
+| p95 (ms) | 368.95 | 322.59 |
+| p99 (ms) | 369.96 | 325.16 |
+| avg (ms) | 262.30 | 232.33 |
+| min (ms) | 35.77 | 21.87 |
+| max (ms) | 370.31 | 327.79 |
+| throughput (req/s) | 250.80 | 292.95 |
+| total duration (s) | 0.40 | 0.34 |
 
-Interpretation:
-- `min` usually reflects early requests that reached a less busy server state.
-- `p99` reflects tail latency under burst concurrency and queueing.
-- With 100 simultaneous requests on a local single-process server, this spread is expected.
+Brief comparison:
+- In this run, `isolation_forest` was faster than `gaussian` across p50/p95/p99 and average latency.
+- Throughput was also higher for `isolation_forest` (+42.14 req/s, about +16.8%).
+- Results are environment-sensitive (local machine/load), so compare trends across repeated runs.
 
 ## Known Limitations
 
@@ -244,11 +266,12 @@ make docker-down
 
 ## Architecture Decisions (Brief)
 
-- Persistence uses local filesystem artifacts (`joblib` + `metadata.json`) under `storage/{series_id}/{version}`.
+- Persistence uses detector-scoped local filesystem artifacts (`joblib` + `metadata.json`) under `storage/{series_id}/{detector}/{version}`.
 - Concurrency uses per-series locks (`threading.Lock`) to serialize retraining of the same `series_id`.
 - Validation is fail-fast and runs before training lock acquisition.
 - API contract follows `docs/context/openapi_spec.yaml`; internal schemas are mapped in the API layer.
 - Metrics are in-memory with bounded latency windows for percentile calculations.
+- Live API docs expose detector query params and normalized errors at `/docs` and `/redoc`.
 
 ## Configuration
 

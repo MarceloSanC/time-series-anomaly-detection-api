@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.dependencies import get_model_service
-from app.domain.schemas import DataPoint, ErrorResponse
+from app.domain.schemas import DataPoint, DetectorType, ErrorResponse
 from app.services.model_service import ModelService
 
 router = APIRouter(tags=["Prediction"])
@@ -36,6 +36,11 @@ class PredictResponse(BaseModel):
 
     anomaly: bool = Field(..., description="True when the point exceeds model threshold.", examples=[False])
     model_version: str = Field(..., description="Model version used for prediction.", examples=["v1"])
+    detector: DetectorType = Field(
+        ...,
+        description="Detector type used for prediction.",
+        examples=["gaussian", "isolation_forest"],
+    )
 
 
 @router.post(
@@ -44,28 +49,109 @@ class PredictResponse(BaseModel):
     summary="Predict anomaly for one data point",
     description="Runs prediction for a single timestamp/value point using latest or explicit model version.",
     responses={
-        400: {"model": ErrorResponse, "description": "Invalid series identifier."},
-        404: {"model": ErrorResponse, "description": "Series or requested version not found."},
-        422: {"model": ErrorResponse, "description": "Request payload validation error."},
+        400: {
+            "model": ErrorResponse,
+            "description": "Invalid series identifier.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "invalid_series_id": {
+                            "summary": "Unsafe series id path",
+                            "value": {
+                                "error": "INVALID_SERIES_ID",
+                                "message": "Invalid series_id: 'sensor..A'",
+                                "detail": None,
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        }
+                    }
+                }
+            },
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "Series or requested version not found.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "series_not_found": {
+                            "summary": "Series does not exist",
+                            "value": {
+                                "error": "SERIES_NOT_FOUND",
+                                "message": "Series 'missing_series' not found",
+                                "detail": None,
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        },
+                        "version_not_found_for_detector": {
+                            "summary": "Version missing in selected detector namespace",
+                            "value": {
+                                "error": "VERSION_NOT_FOUND_FOR_DETECTOR",
+                                "message": "Version 'v999' not found for series 'sensor_A' detector 'gaussian'",
+                                "detail": None,
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        422: {
+            "model": ErrorResponse,
+            "description": "Request payload validation error or unsupported detector value.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "unsupported_detector": {
+                            "summary": "Unsupported detector query value",
+                            "value": {
+                                "error": "UNSUPPORTED_DETECTOR",
+                                "message": "Detector 'random_forest' is not supported",
+                                "detail": None,
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        },
+                        "payload_validation_error": {
+                            "summary": "Invalid request body",
+                            "value": {
+                                "error": "VALIDATION_ERROR",
+                                "message": "Request payload validation failed",
+                                "detail": "[{'type': 'value_error', 'loc': ['body', 'timestamp'], 'msg': 'timestamp must be a unix timestamp string'}]",
+                                "timestamp": "2026-04-15T17:10:00Z",
+                            },
+                        },
+                    }
+                }
+            },
+        },
     },
 )
 def predict_series(
     series_id: str,
     payload: PredictRequest,
     version: str | None = Query(default=None),
+    detector: str = Query(
+        default="gaussian",
+        description="Detector type to use for prediction. Supported values: gaussian, isolation_forest.",
+        openapi_examples={
+            "gaussian": {"summary": "Default detector", "value": "gaussian"},
+            "isolation_forest": {"summary": "Isolation Forest detector", "value": "isolation_forest"},
+        },
+    ),
     model_service: ModelService = Depends(get_model_service),
 ) -> PredictResponse:
     """Predict anomaly status for one point using latest or requested version."""
-    logger.info("Predict request received", extra={"series_id": series_id, "version": version})
+    logger.info("Predict request received", extra={"series_id": series_id, "version": version, "detector": detector})
     timestamp = int(payload.timestamp)
 
     prediction = model_service.predict(
         series_id=series_id,
         data_point=DataPoint(timestamp=timestamp, value=payload.value),
         version=version,
+        detector=detector,
     )
     logger.info(
         "Predict request completed",
         extra={"series_id": series_id, "version": prediction.version, "anomaly": prediction.is_anomaly},
     )
-    return PredictResponse(anomaly=prediction.is_anomaly, model_version=prediction.version)
+    return PredictResponse(anomaly=prediction.is_anomaly, model_version=prediction.version, detector=prediction.detector)

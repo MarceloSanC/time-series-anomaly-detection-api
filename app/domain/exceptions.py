@@ -41,6 +41,14 @@ class VersionNotFoundError(Exception):
     """Raised when requested model version is missing for a series."""
 
 
+class UnsupportedDetectorError(ValueError):
+    """Raised when the requested detector type is not recognized."""
+
+
+class VersionNotFoundForDetectorError(Exception):
+    """Raised when requested model version is missing for a (series_id, detector) pair."""
+
+
 class InvalidSeriesIdError(ValueError):
     """Raised when series_id is empty or unsafe for filesystem-backed storage."""
 

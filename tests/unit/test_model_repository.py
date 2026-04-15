@@ -59,14 +59,16 @@ def test_save_writes_index_atomically_and_without_tmp_residue(tmp_path: Path) ->
         metadata=_metadata("v1", 3),
     )
 
-    series_dir = tmp_path / "sensor_A"
-    index_path = series_dir / "index.json"
-    tmp_index_path = series_dir / "index.json.tmp"
+    detector_dir = tmp_path / "sensor_A" / "gaussian"
+    index_path = detector_dir / "index.json"
+    tmp_index_path = detector_dir / "index.json.tmp"
 
     assert index_path.exists()
     assert not tmp_index_path.exists()
 
     index = json.loads(index_path.read_text(encoding="utf-8"))
+    assert index["schema_version"] == "1"
+    assert index["detector"] == "gaussian"
     assert index["latest_version"] == "v1"
     assert index["versions"] == ["v1"]
 
@@ -187,3 +189,113 @@ def test_list_all_skips_non_directory_and_series_without_index(tmp_path: Path) -
 
     assert len(indexes) == 1
     assert indexes[0]["series_id"] == "sensor_A"
+
+
+def test_detector_scoped_paths_are_independent(tmp_path: Path) -> None:
+    """Two detectors on the same series must not share indexes or version state."""
+    repository = ModelRepository(storage_path=tmp_path)
+    model = _fitted_model([1.0, 2.0, 3.0])
+
+    repository.save(series_id="sensor_A", version="v1", model=model, metadata=_metadata("v1", 3), detector="gaussian")
+    repository.save(
+        series_id="sensor_A", version="v1", model=model, metadata=_metadata("v1", 3), detector="isolation_forest"
+    )
+    repository.save(series_id="sensor_A", version="v2", model=model, metadata=_metadata("v2", 3), detector="gaussian")
+
+    gaussian_index = repository.get_index("sensor_A", detector="gaussian")
+    iso_index = repository.get_index("sensor_A", detector="isolation_forest")
+
+    assert gaussian_index is not None
+    assert gaussian_index["latest_version"] == "v2"
+    assert gaussian_index["versions"] == ["v1", "v2"]
+    assert gaussian_index["detector"] == "gaussian"
+
+    assert iso_index is not None
+    assert iso_index["latest_version"] == "v1"
+    assert iso_index["versions"] == ["v1"]
+    assert iso_index["detector"] == "isolation_forest"
+
+
+def test_version_exists_is_scoped_per_detector(tmp_path: Path) -> None:
+    """version_exists must check within the correct detector namespace."""
+    repository = ModelRepository(storage_path=tmp_path)
+    model = _fitted_model([1.0, 2.0, 3.0])
+
+    repository.save(series_id="sensor_A", version="v1", model=model, metadata=_metadata("v1", 3), detector="gaussian")
+
+    assert repository.version_exists("sensor_A", "v1", detector="gaussian") is True
+    assert repository.version_exists("sensor_A", "v1", detector="isolation_forest") is False
+
+
+def test_list_all_returns_one_entry_per_series_detector_pair(tmp_path: Path) -> None:
+    """list_all must return one index per (series_id, detector) combination."""
+    repository = ModelRepository(storage_path=tmp_path)
+    model = _fitted_model([1.0, 2.0, 3.0])
+
+    repository.save(series_id="sensor_A", version="v1", model=model, metadata=_metadata("v1", 3), detector="gaussian")
+    repository.save(
+        series_id="sensor_A", version="v1", model=model, metadata=_metadata("v1", 3), detector="isolation_forest"
+    )
+    repository.save(series_id="sensor_B", version="v1", model=model, metadata=_metadata("v1", 3), detector="gaussian")
+
+    indexes = repository.list_all()
+
+    assert len(indexes) == 3
+    keys = sorted((idx["series_id"], idx["detector"]) for idx in indexes)
+    assert keys == [("sensor_A", "gaussian"), ("sensor_A", "isolation_forest"), ("sensor_B", "gaussian")]
+
+
+def test_index_contains_schema_version(tmp_path: Path) -> None:
+    """Saved index must include schema_version field for forward compatibility."""
+    repository = ModelRepository(storage_path=tmp_path)
+    repository.save(
+        series_id="sensor_A", version="v1", model=_fitted_model([1.0, 2.0, 3.0]), metadata=_metadata("v1", 3)
+    )
+
+    index = repository.get_index("sensor_A")
+
+    assert index is not None
+    assert index["schema_version"] == "1"
+
+
+def test_load_is_scoped_per_detector(tmp_path: Path) -> None:
+    """load() must read from the correct detector namespace and not cross into another."""
+    repository = ModelRepository(storage_path=tmp_path)
+    model = _fitted_model([1.0, 2.0, 3.0])
+
+    repository.save(series_id="sensor_A", version="v1", model=model, metadata=_metadata("v1", 3), detector="gaussian")
+
+    # Artifact exists under gaussian but not isolation_forest.
+    loaded_model, loaded_meta = repository.load("sensor_A", "v1", detector="gaussian")
+    assert loaded_meta["version"] == "v1"
+
+    with pytest.raises(FileNotFoundError):
+        repository.load("sensor_A", "v1", detector="isolation_forest")
+
+
+def test_load_metadata_is_scoped_per_detector(tmp_path: Path) -> None:
+    """load_metadata() must not read across detector namespaces."""
+    repository = ModelRepository(storage_path=tmp_path)
+
+    repository.save(
+        series_id="sensor_A", version="v1", model=_fitted_model([1.0, 2.0, 3.0]), metadata=_metadata("v1", 3),
+        detector="gaussian",
+    )
+
+    meta = repository.load_metadata("sensor_A", "v1", detector="gaussian")
+    assert meta["n_samples"] == 3
+
+    with pytest.raises(FileNotFoundError):
+        repository.load_metadata("sensor_A", "v1", detector="isolation_forest")
+
+
+def test_unsafe_detector_string_is_rejected(tmp_path: Path) -> None:
+    """Detector strings with path traversal tokens must raise ValueError."""
+    repository = ModelRepository(storage_path=tmp_path)
+    model = _fitted_model([1.0, 2.0, 3.0])
+
+    with pytest.raises(ValueError):
+        repository.save(series_id="sensor_A", version="v1", model=model, metadata=_metadata("v1", 3), detector="../x")
+
+    with pytest.raises(ValueError):
+        repository.get_index("sensor_A", detector="../x")
