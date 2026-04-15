@@ -21,6 +21,30 @@ logger = logging.getLogger(__name__)
         422: {
             "model": ErrorResponse,
             "description": "Incomplete metadata found when `strict=true` or unsupported detector value.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "incomplete_metadata": {
+                            "summary": "Missing latest metadata (strict mode)",
+                            "value": {
+                                "error": "INCOMPLETE_MODEL_METADATA",
+                                "message": "Metadata missing for series 'sensor_XYZ' at latest version 'v1'",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        },
+                        "unsupported_detector": {
+                            "summary": "Unsupported detector query value",
+                            "value": {
+                                "error": "UNSUPPORTED_DETECTOR",
+                                "message": "Detector 'random_forest' is not supported",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        },
+                    }
+                }
+            },
         }
     },
 )
@@ -62,8 +86,44 @@ def list_models(
     summary="Get model detail for one series",
     description="Returns lineage metadata and derived data-quality indicators for the latest model version.",
     responses={
-        404: {"model": ErrorResponse, "description": "Series not found."},
-        422: {"model": ErrorResponse, "description": "Unsupported detector value."},
+        404: {
+            "model": ErrorResponse,
+            "description": "Series not found.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "series_not_found": {
+                            "summary": "Series does not exist",
+                            "value": {
+                                "error": "SERIES_NOT_FOUND",
+                                "message": "Series 'sensor_XYZ' not found",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        }
+                    }
+                }
+            },
+        },
+        422: {
+            "model": ErrorResponse,
+            "description": "Unsupported detector value.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "unsupported_detector": {
+                            "summary": "Unsupported detector query value",
+                            "value": {
+                                "error": "UNSUPPORTED_DETECTOR",
+                                "message": "Detector 'random_forest' is not supported",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        }
+                    }
+                }
+            },
+        },
     },
 )
 def get_model_detail(
@@ -95,8 +155,53 @@ def get_model_detail(
     summary="Get metadata for one model version",
     description="Returns persisted metadata for a concrete model version. Training data is optional via `include_data`.",  # noqa: E501
     responses={
-        404: {"model": ErrorResponse, "description": "Series or version not found."},
-        422: {"model": ErrorResponse, "description": "Unsupported detector value."},
+        404: {
+            "model": ErrorResponse,
+            "description": "Series or version not found.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "series_not_found": {
+                            "summary": "Series does not exist",
+                            "value": {
+                                "error": "SERIES_NOT_FOUND",
+                                "message": "Series 'sensor_XYZ' not found",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        },
+                        "version_not_found_for_detector": {
+                            "summary": "Version missing in selected detector namespace",
+                            "value": {
+                                "error": "VERSION_NOT_FOUND_FOR_DETECTOR",
+                                "message": "Version 'v999' not found for series 'sensor_XYZ' detector 'gaussian'",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        422: {
+            "model": ErrorResponse,
+            "description": "Unsupported detector value.",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "unsupported_detector": {
+                            "summary": "Unsupported detector query value",
+                            "value": {
+                                "error": "UNSUPPORTED_DETECTOR",
+                                "message": "Detector 'random_forest' is not supported",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        }
+                    }
+                }
+            },
+        },
     },
 )
 def get_model_version_metadata(
