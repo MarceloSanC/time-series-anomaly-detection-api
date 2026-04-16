@@ -695,12 +695,20 @@ Rationale:
    - Use only `numpy` (already a dependency) for the regression.
 
 6. Tests
-   - Integration test for `/plot?detector=gaussian` with `training_anomaly_flags`: verify `200`, `image/png`, and PNG signature.
-   - Integration test for `/plot?detector=isolation_forest` with `training_scores`: verify `200`, `image/png`, and PNG signature.
-   - Integration test for `/plot` without detector param: verify gaussian default behavior remains unchanged (`200`, `image/png`, PNG signature).
-   - Integration test for `/plot?detector=isolation_forest&version=vX` where `vX` exists only in gaussian namespace: verify `404 VERSION_NOT_FOUND_FOR_DETECTOR`.
-   - Integration test for `/plot?detector=random_forest`: verify `422` with `UNSUPPORTED_DETECTOR`.
-   - Unit/service test for `get_plot_data(..., detector=...)` to validate detector-scoped plot payload fields (`score_threshold`, `training_scores`, `training_anomaly_flags`) without relying on image-content assertions.
+   Integration (`tests/integration/test_plot_endpoint.py`):
+   - `/plot?detector=gaussian` after normal `/fit`: verify `200`, `image/png`, PNG signature (exercises blue/red coloring path).
+   - `/plot?detector=isolation_forest` after `/fit?detector=isolation_forest`: verify `200`, `image/png`, PNG signature (exercises score-colored scatter + flags overlay).
+   - `/plot` without detector param: verify gaussian default behavior unchanged (`200`, `image/png`, PNG signature).
+   - `/plot?detector=isolation_forest&version=v1` where v1 exists only in gaussian namespace: verify `404 VERSION_NOT_FOUND_FOR_DETECTOR`.
+   - `/plot?detector=isolation_forest` where series was only trained with gaussian (no IF namespace): verify `404 SERIES_NOT_FOUND`.
+   - `/plot?detector=random_forest`: verify `422 UNSUPPORTED_DETECTOR`.
+   - Backward compat — gaussian legacy metadata without `training_anomaly_flags`: manually save metadata without the field, verify `200` and PNG signature (uniform color fallback, no crash).
+   - Backward compat — isolation_forest legacy metadata without `training_scores`/`training_anomaly_flags`: manually save IF metadata without those fields, verify `200` and PNG signature (uniform color fallback, no score overlay).
+
+   Unit/service (`tests/unit/test_model_service.py`):
+   - `get_plot_data(detector="gaussian")`: verify payload contains `training_anomaly_flags` as a list of bools with length equal to `n_samples`, and `mean`/`std` are present.
+   - `get_plot_data(detector="isolation_forest")`: verify payload contains `score_threshold` (float), `training_scores` (list of floats, length equal to `n_samples`), `training_anomaly_flags` (list of bools), and `contamination`.
+   - `get_plot_data(detector="isolation_forest")` for series trained only with gaussian: verify `SeriesNotFoundError` is raised.
 
 7. Documentation
    - Update `/plot` section in `ARCHITECTURE.md` to document the detector param and per-detector rendering behavior.
