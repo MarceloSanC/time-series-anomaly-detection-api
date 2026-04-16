@@ -288,9 +288,11 @@ def test_build_data_quality_with_normal_metadata_payload(tmp_path: Path) -> None
 
     quality = service._build_data_quality(metadata=metadata, n_samples=3)  # noqa: SLF001
 
+    import numpy as np
+
     assert quality.n_samples == 3
-    assert quality.mean == 2.0
-    assert quality.std == 1.0
+    assert quality.mean == pytest.approx(np.mean([1.0, 2.0, 3.0]))
+    assert quality.std == pytest.approx(np.std([1.0, 2.0, 3.0]))
     assert quality.min_value == 1.0
     assert quality.max_value == 3.0
     assert quality.time_span_seconds == 10

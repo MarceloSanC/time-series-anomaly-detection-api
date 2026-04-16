@@ -89,6 +89,7 @@ docker compose logs -f api
 | `make check` | `make lint && make test` | Pre-PR gate: lint then test |
 | `make run` | `uvicorn app.main:app --reload` | Start local dev server on port 8000 |
 | `make docker-up` | `docker compose up -d` | Start service in background |
+| `make docker-rebuild` | `docker compose up -d --build` | Rebuild image and restart without removing volumes |
 | `make docker-down` | `docker compose down -v` | Stop service and remove volumes |
 | `make docker-test` | `docker compose run --rm api-tests` | Run tests inside container |
 | `make benchmark` | `python scripts/benchmark.py` | Run 100-request parallel inference benchmark |
@@ -186,15 +187,21 @@ the core OpenAPI-defined contracts for `/fit`, `/predict`, and `/healthcheck`.
 Visualization:
 
 ```bash
+# gaussian (default): mean line, ±3σ bounds, blue/red anomaly coloring
 curl "http://localhost:8000/plot?series_id=sensor_XYZ" --output plot.png
+
+# explicit version
 curl "http://localhost:8000/plot?series_id=sensor_XYZ&version=v1" --output plot_v1.png
+
+# isolation_forest: score-colored scatter (coolwarm_r), score_threshold line, contamination annotation
+curl "http://localhost:8000/plot?series_id=sensor_XYZ&detector=isolation_forest" --output plot_if.png
 ```
 
 Example output:
 
 ![Plot endpoint example showing training points, mean line, and +/-3 sigma bounds](docs/assets/plot_example.png)
 
-The image shows training points (scatter), the model mean, and upper/lower 3-sigma thresholds.
+The gaussian plot shows training points colored by anomaly flag (blue = normal, red = flagged), the model mean, and ±3σ threshold bands. The isolation_forest plot renders score-intensity coloring and a `score_threshold` decision line. Both include a linear trend overlay and point count in the title.
 
 ## Analysis Scripts
 

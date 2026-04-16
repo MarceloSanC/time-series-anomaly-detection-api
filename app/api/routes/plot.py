@@ -185,15 +185,14 @@ def _render_isolation_forest_plot(fig: Figure, ax: Axes, plot_data: dict[str, An
     else:
         ax.scatter(dates, values, s=14, alpha=0.8, color="#1f77b4", label="training points")
 
-    score_threshold = plot_data.get("score_threshold")
-    if isinstance(score_threshold, (int, float)):
-        ax.axhline(float(score_threshold), linestyle="--", linewidth=1.4, label="score_threshold")
-
     _add_trend_line(ax=ax, training_data=training_data, dates=dates, values=values)
     contamination = _format_contamination(plot_data.get("contamination"))
+    score_threshold = plot_data.get("score_threshold")
     title = f"Series {plot_data['series_id']} ({plot_data['version']}) — {len(values)} points"
     if contamination is not None:
         title = f"{title} - contamination={contamination}"
+    if isinstance(score_threshold, (int, float)):
+        title = f"{title} - threshold={float(score_threshold):.3f}"
     ax.set_title(title)
     _apply_axis_layout(fig=fig, ax=ax, dates=dates)
 

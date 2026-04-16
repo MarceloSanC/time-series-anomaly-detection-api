@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from datetime import UTC, datetime
 import logging
+import numpy as np
 from time import perf_counter
 from typing import Any, ContextManager, Protocol
 
@@ -354,16 +355,17 @@ class ModelService:
             for point in training_data
             if isinstance(point, dict) and "value" in point
         ]
-        # Read mean/std from model_params (new format) with fallback to top-level (legacy format).
-        stored_params = metadata.get("model_params") or {}
-        mean_raw = stored_params.get("mean") if stored_params else metadata.get("mean")
-        if mean_raw is None:
-            mean_raw = metadata.get("mean")
-        std_raw = stored_params.get("std") if stored_params else metadata.get("std")
-        if std_raw is None:
-            std_raw = metadata.get("std")
-        mean = float(mean_raw) if mean_raw is not None else None
-        std = float(std_raw) if std_raw is not None else None
+        # Compute mean/std from training data when available; fall back to stored model params
+        # for legacy metadata that predates training_data persistence.
+        if values:
+            mean = float(np.mean(values))
+            std = float(np.std(values))
+        else:
+            stored_params = metadata.get("model_params") or {}
+            mean_raw = stored_params.get("mean") or metadata.get("mean")
+            std_raw = stored_params.get("std") or metadata.get("std")
+            mean = float(mean_raw) if mean_raw is not None else None
+            std = float(std_raw) if std_raw is not None else None
 
         min_value = min(values) if values else (mean if mean is not None else 0.0)
         max_value = max(values) if values else (mean if mean is not None else 0.0)
