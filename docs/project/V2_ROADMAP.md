@@ -592,6 +592,180 @@ make smoke
 
 ---
 
+## STAGE H (P1) — Industrial Dataset Generator
+
+Status: Pending
+
+### Goal
+
+Produce a realistic synthetic industrial dataset generator and wire it into the existing analysis scripts.
+
+Rationale:
+- current analysis scripts (compare_detectors, drift_analysis) use simple gaussian noise; a realistic dataset with degradation trends, regime shifts, and electrical spikes validates detector behavior under conditions closer to production IoT data
+- the generator transforms theoretical claims in MODEL_DESIGN_NOTES.md into empirically grounded evidence backed by domain-representative data
+
+### Implementation Tasks (Ordered)
+
+1. Industrial dataset generator
+   - Create `scripts/generate_industrial_dataset.py`.
+   - Implement `generate_vibration_series()` with configurable components:
+     - base signal with slow degradation trend (`base + degradation_rate × t`)
+     - seasonality (`amplitude × sin(2π × t / period)`)
+     - gaussian noise
+     - sudden regime changes (mean shift at random points)
+     - electrical spikes (single points at ±10σ from local mean)
+     - flat line segments (simulate sensor disconnect)
+     - injected ground-truth anomalies (sustained deviations of +4σ for 3–5 consecutive points)
+   - Save output to `data/industrial_sample.json` with schema:
+     ```json
+     {
+       "metadata": { "n_points": int, "sampling_hz": float, "n_injected_anomalies": int },
+       "series": [ { "timestamp": int, "value": float, "is_anomaly": bool } ]
+     }
+     ```
+   - Document parameters and usage in script docstring.
+
+2. Wire generator into existing analysis scripts
+   - Update `scripts/compare_detectors.py` to optionally load from `data/industrial_sample.json` instead of generating inline gaussian data.
+   - Update `scripts/drift_analysis.py` to reference generator for the baseline and drift datasets.
+   - Keep existing synthetic fallback when file is absent (backward compatible).
+
+3. Tests
+   - Unit test for `generate_vibration_series()`: verify output schema, anomaly label count, and presence of all configured components (regime changes, spikes, flat segments).
+
+4. Documentation
+   - Add "Sample Data" section in `README.md` referencing `generate_industrial_dataset.py` and `data/industrial_sample.json`.
+   - Update MODEL_DESIGN_NOTES.md §4 to reference results from the generator-backed runs of compare_detectors and drift_analysis.
+
+### Acceptance Criteria
+
+- `python scripts/generate_industrial_dataset.py` produces `data/industrial_sample.json` with all required schema fields.
+- `compare_detectors.py` and `drift_analysis.py` consume the generated file when present.
+- `pytest -v` passes.
+
+---
+
+## STAGE I (P1) — Enriched `/plot` Endpoint with Detector-Aware Rendering
+
+Status: Pending
+
+### Goal
+
+Extend the `/plot` endpoint to support both detectors with separate, intrinsics-aware rendering functions, and enrich the visual output with anomaly coloring and trend overlay.
+
+Rationale:
+- `/plot` currently resolves only to the gaussian namespace and renders mean/std bands, which are undefined for isolation_forest; this makes the endpoint silently incorrect for isolation_forest series
+- separating rendering per detector allows each plot to expose the model's own decision surface — the threshold bands for gaussian, the score boundary for isolation_forest — making the diagnostic value of the plot proportional to the model's actual behavior
+- anomaly coloring and trend line convert a static scatter into an actionable view of which training points the model flagged and how the signal evolves over time
+
+### Implementation Tasks (Ordered)
+
+1. Add `?detector=` param to `/plot` route
+   - Add optional `detector: str = "gaussian"` query parameter to the route handler in `app/api/routes/plot.py`.
+   - Validate against `SUPPORTED_DETECTORS`; return `UNSUPPORTED_DETECTOR` (422) for unrecognized values.
+   - Propagate detector through `model_service.get_plot_data(series_id, version, detector)` and into `_resolve_version`.
+
+2. Separate rendering functions per detector
+   - Refactor `app/api/routes/plot.py` to extract two rendering functions:
+     - `_render_gaussian_plot(fig, ax, plot_data)` — retain current behavior: scatter of training points, `mean` horizontal line, `upper_bound` (mean + 3σ) and `lower_bound` (mean − 3σ) band lines.
+     - `_render_isolation_forest_plot(fig, ax, plot_data)` — isolation-forest-specific elements:
+       - scatter training points colored by anomaly score intensity (blue = low score, red = high score) using `training_scores: list[float]` from metadata; fall back to uniform color when absent.
+       - `score_threshold` horizontal line (the decision boundary, equivalent to upper_bound for gaussian).
+       - subtitle or title annotation with contamination rate (`{contamination:.1%} contamination`).
+   - Route handler dispatches to the correct function based on `detector`.
+
+3. Persist `training_scores` for isolation_forest
+   - After fitting an isolation_forest model, compute the anomaly score for each training point (`decision_function` output).
+   - Store as `training_scores: list[float]` in `metadata.json` alongside `training_data`.
+   - No change needed for gaussian (gaussian does not use scores).
+
+4. Anomaly coloring for both detectors
+   - Extend the model_service training path: after fitting either detector, run a post-fit pass over training data to compute `training_anomaly_flags: list[bool]` (which training points the trained model would flag).
+   - Persist `training_anomaly_flags` in `metadata.json` alongside `training_data`.
+   - In `_render_gaussian_plot`: use `training_anomaly_flags` for blue/red point coloring when present; fall back to uniform color (backward compatible).
+   - In `_render_isolation_forest_plot`: use `training_scores` for color intensity when present; overlay `training_anomaly_flags` as marker shape (circle = normal, x = flagged) when available.
+
+5. Trend line and title annotation (both detectors)
+   - Add linear regression trend line over `(timestamp, value)` pairs as a thin dashed overlay in both rendering functions.
+   - Add point count annotation to the plot title: `Series {series_id} ({version}) — {n} points`.
+   - Use only `numpy` (already a dependency) for the regression.
+
+6. Tests
+   - Integration test for `/plot?detector=gaussian` with `training_anomaly_flags`: verify `200` with enriched metadata.
+   - Integration test for `/plot?detector=isolation_forest` with `training_scores`: verify `200`.
+   - Integration test for `/plot` with legacy metadata (no `training_anomaly_flags`, no `training_scores`): verify backward-compatible `200`.
+   - Integration test for `/plot?detector=random_forest`: verify `422` with `UNSUPPORTED_DETECTOR`.
+
+7. Documentation
+   - Update `/plot` section in `ARCHITECTURE.md` to document the detector param and per-detector rendering behavior.
+
+### Acceptance Criteria
+
+- `GET /plot/{series_id}` (no detector param) behaves identically to before this stage.
+- `GET /plot/{series_id}?detector=isolation_forest` returns `200` and renders score-colored points with a `score_threshold` line.
+- `GET /plot/{series_id}?detector=gaussian` renders mean, upper_bound, lower_bound lines with anomaly-colored points when `training_anomaly_flags` present.
+- Fallback to uniform color for models trained before this stage (no 500 errors).
+- Unsupported detector param returns `422` with `UNSUPPORTED_DETECTOR`.
+- `pytest -v` passes.
+
+---
+
+## STAGE J (P2) — Production Observability Stack
+
+Status: Pending
+
+### Goal
+
+Add opt-in production observability tooling: a Prometheus + Grafana monitoring stack and a Kafka streaming inference example.
+
+Rationale:
+- the MLE Production Systems role explicitly evaluates familiarity with monitoring infrastructure and event-driven platforms
+- both items are additive only and do not modify the core application; they are architectural demonstrations, not production features
+- Prometheus/Grafana converts the in-memory latency data that already exists into a persistent, queryable time-series store; Kafka shows that the service layer is correctly decoupled from HTTP transport
+
+### Implementation Tasks (Ordered)
+
+1. Prometheus metrics endpoint
+   - Create `app/api/routes/metrics_prometheus.py` with `GET /metrics`.
+   - Format output manually from `MetricsService.snapshot()` in Prometheus text format (no `prometheus_client` dependency).
+   - Expose: request count per endpoint, p50/p95/p99 latency per endpoint, anomaly detection rate per series.
+   - Register route in `app/main.py` only when `PROMETHEUS_ENABLED=true` (env flag, default `false`).
+
+2. Prometheus + Grafana compose stack
+   - Create `docker-compose.observability.yml` (separate file — do NOT modify `docker-compose.yml`).
+   - Services: Prometheus (scrapes `/metrics`) + Grafana (pre-provisioned dashboard).
+   - Create `monitoring/prometheus.yml` with scrape config pointing to the API service.
+   - Create `monitoring/grafana/dashboard.json` with panels:
+     - request rate per endpoint
+     - p95 inference latency over time
+     - anomaly detection rate per series
+     - training events timeline
+   - Startup command: `docker compose -f docker-compose.yml -f docker-compose.observability.yml up`.
+
+3. Kafka streaming inference example
+   - Create `examples/kafka/schemas.py` — message schemas mirroring existing `DataPoint` and `PredictionResponse` Pydantic models.
+   - Create `examples/kafka/producer.py` — generates synthetic sensor data and publishes to input topic `raw_sensor_data`.
+   - Create `examples/kafka/consumer.py` — reads from `raw_sensor_data`, calls `ModelService.predict()` directly (not via HTTP), publishes result to `anomaly_events` topic.
+   - Create `docker-compose.kafka.yml` with Kafka + Zookeeper + consumer + producer services.
+   - Startup command: `docker compose -f docker-compose.yml -f docker-compose.kafka.yml up`.
+   - The consumer must import `ModelService` directly — this validates that the service layer is transport-agnostic.
+
+4. Documentation
+   - Add "Monitoring" section in `README.md` documenting the observability stack and startup command.
+   - Add "Advanced: Streaming" section in `README.md` documenting the Kafka example, clearly scoped as an architectural example.
+   - Both sections must explicitly state these are opt-in and do not affect the core application.
+
+### Acceptance Criteria
+
+- `docker compose -f docker-compose.yml -f docker-compose.observability.yml up` starts without error.
+- Grafana dashboard at `localhost:3000` shows live data after running `make benchmark`.
+- `docker compose -f docker-compose.yml -f docker-compose.kafka.yml up` starts without error.
+- Running `producer.py` generates messages visible in the `anomaly_events` topic via `consumer.py`.
+- Main `docker-compose.yml` is completely unchanged.
+- Core application test suite (`pytest -v`) passes without any observability dependencies installed.
+
+---
+
 ## Delivery Notes
 
 - Keep each stage in its own small PR.

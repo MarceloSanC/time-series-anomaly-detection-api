@@ -210,6 +210,16 @@ The consumer replaces the HTTP route handler as the entry point. The service lay
 **Latency optimization path:** At 1 Hz sensor sampling, the inference SLA is < 1000ms. The current p99 (~300ms on a local single-instance setup) is within budget for single-sensor alerting but tightens under multi-sensor fan-out. 
 Optimization: pre-load the latest model version into `app.state` on startup, eliminating `joblib.load()` from the critical path. Expected p99 after in-memory caching: < 5ms.
 
+**Capacity roadmap:**
+
+| Focus | Change | Expected impact |
+|---|---|---|
+| Latest-model cache | In-memory cache by `(series_id, detector)` with invalidation on `/fit` | Lower `/predict` p99 |
+| Load profiles + SLO reports | Ramp-up, sustained, mixed (`/fit` + `/predict`) tests with versioned reports | Reproducible capacity evidence |
+| Backpressure | Bounded concurrency + controlled `429/503` at saturation | Prevent collapse under burst traffic |
+| Operational metrics | Error rate, cache hit/miss, lock-wait, artifact-load time | Faster bottleneck diagnosis |
+| Capacity & Limits doc | Publish max throughput, saturation point, environment assumptions | Clear operating boundaries |
+
 ---
 
 ## 14. MULTI-DETECTOR API CONTRACT (Additive Extension)
@@ -402,4 +412,3 @@ Measurement: `X-Response-Time-Ms` response header is set by the metrics middlewa
 | Network isolation | VPC/private subnet; API not exposed to public internet |
 
 ---
-
