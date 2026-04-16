@@ -4,7 +4,7 @@
 
 - `project/ARCHITECTURE.md`: architectural decisions and trade-offs (current + planned extensions)
 - `project/MODEL_DESIGN_NOTES.md`: baseline model analysis, failure modes, and detector evolution path
-- `project/MVP_ROADMAP.md`: original v1.0 execution plan and delivery record
+- `project/V1_ROADMAP.md`: original v1.0 execution plan and delivery record
 - `project/V2_ROADMAP.md`: post-v1.0 enhancements roadmap (Stages A–G)
 - `project/MULTI_DETECTOR_PLAN.md`: multi-detector architecture refactor program (prerequisite for Stage B)
 
