@@ -55,7 +55,7 @@ logger = logging.getLogger(__name__)
         },
         422: {
             "model": ErrorResponse,
-            "description": "Plot data unavailable for selected model version.",
+            "description": "Plot data unavailable for selected model version or unsupported detector value.",
             "content": {
                 "application/json": {
                     "examples": {
@@ -67,7 +67,16 @@ logger = logging.getLogger(__name__)
                                 "detail": None,
                                 "timestamp": "2026-04-15T18:00:00Z",
                             },
-                        }
+                        },
+                        "unsupported_detector": {
+                            "summary": "Unsupported detector query value",
+                            "value": {
+                                "error": "UNSUPPORTED_DETECTOR",
+                                "message": "Detector 'random_forest' is not supported",
+                                "detail": None,
+                                "timestamp": "2026-04-15T18:00:00Z",
+                            },
+                        },
                     }
                 }
             },
@@ -77,11 +86,19 @@ logger = logging.getLogger(__name__)
 def plot_series(
     series_id: str = Query(..., description="Series identifier used during training."),
     version: str | None = Query(default=None, description="Optional model version (defaults to latest)."),
+    detector: str = Query(
+        default="gaussian",
+        description="Detector type to use for plot data lookup. Supported: gaussian, isolation_forest.",
+        openapi_examples={
+            "gaussian": {"summary": "Default detector", "value": "gaussian"},
+            "isolation_forest": {"summary": "Isolation Forest detector", "value": "isolation_forest"},
+        },
+    ),
     model_service: ModelService = Depends(get_model_service),
 ) -> StreamingResponse:
     """Render training points plus mean and 3-sigma bounds as PNG."""
-    logger.info("Plot request received", extra={"series_id": series_id, "version": version})
-    plot_data = model_service.get_plot_data(series_id=series_id, version=version)
+    logger.info("Plot request received", extra={"series_id": series_id, "version": version, "detector": detector})
+    plot_data = model_service.get_plot_data(series_id=series_id, version=version, detector=detector)
 
     training_data = plot_data["training_data"]
     timestamps = [int(point["timestamp"]) for point in training_data]
@@ -113,5 +130,8 @@ def plot_series(
     fig.savefig(buffer, format="png")
     plt.close(fig)
     buffer.seek(0)
-    logger.info("Plot request completed", extra={"series_id": series_id, "version": plot_data["version"]})
+    logger.info(
+        "Plot request completed",
+        extra={"series_id": series_id, "version": plot_data["version"], "detector": detector},
+    )
     return StreamingResponse(buffer, media_type="image/png")

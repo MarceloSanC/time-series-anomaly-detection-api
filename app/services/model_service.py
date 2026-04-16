@@ -264,11 +264,21 @@ class ModelService:
             payload["training_data"] = metadata.get("training_data", [])
         return ModelVersionMetadata.model_validate(payload)
 
-    def get_plot_data(self, series_id: str, version: str | None = None) -> dict[str, Any]:
+    def get_plot_data(
+        self,
+        series_id: str,
+        version: str | None = None,
+        detector: str = "gaussian",
+    ) -> dict[str, Any]:
         """Return metadata fields required to render training data visualization."""
-        resolved_version = self._resolve_version(series_id=series_id, version=version)
+        detector_name = self._normalize_detector_type(detector)
+        resolved_version = self._resolve_version(series_id=series_id, version=version, detector=detector_name)
         try:
-            metadata = self.repository.load_metadata(series_id=series_id, version=resolved_version)
+            metadata = self.repository.load_metadata(
+                series_id=series_id,
+                version=resolved_version,
+                detector=detector_name,
+            )
         except FileNotFoundError as exc:
             raise PlotDataUnavailableError(
                 f"Plot metadata not available for series '{series_id}' version '{resolved_version}'"
@@ -284,6 +294,7 @@ class ModelService:
         return {
             "series_id": series_id,
             "version": resolved_version,
+            "detector": detector_name,
             "mean": mean,
             "std": std,
             "training_data": training_data,
