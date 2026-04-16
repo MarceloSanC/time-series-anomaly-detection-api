@@ -647,7 +647,7 @@ Rationale:
 
 ## STAGE I (P1) — Enriched `/plot` Endpoint with Detector-Aware Rendering
 
-Status: Pending
+Status: Completed
 
 ### Goal
 
@@ -778,6 +778,80 @@ Rationale:
 - Running `producer.py` generates messages visible in the `anomaly_events` topic via `consumer.py`.
 - Main `docker-compose.yml` is completely unchanged.
 - Core application test suite (`pytest -v`) passes without any observability dependencies installed.
+
+---
+
+## STAGE K (P2) — Per-Model Inference Metrics in /healthcheck
+
+Status: Pending
+
+### Goal
+
+Extend `/healthcheck` to expose inference latency broken down by `series_id`, `version`, and `detector`, in addition to the existing per-endpoint aggregates.
+
+Rationale:
+- The current `/healthcheck` collapses all predict calls into a single `inference_latency_ms` aggregate, making it impossible to detect whether latency regressions are isolated to a specific model or detector
+- No new infrastructure required — builds on the existing `MetricsService` in-memory collector and the ASGI middleware already in `app/main.py`
+- Additive only: existing `HealthcheckResponse` fields are preserved unchanged
+
+Design decision — middleware as single latency source:
+- The ASGI middleware in `app/main.py` is the authoritative source of HTTP-total latency (covers serialization, validation, service call)
+- Route handlers must not call `metrics_service.record()` directly to avoid double-counting or measuring only part of the request
+- Dimensions (`series_id`, `version`, `detector`) are injected via `request.state` inside the route handler and read by the middleware at response time
+
+### Implementation Tasks (Ordered)
+
+1. Extend `MetricsService` to support labeled records
+   - Add optional `label: str | None = None` parameter to `record()`.
+   - Internal key: `f"{endpoint}|{label}"` when label is present, `endpoint` otherwise.
+   - `snapshot()` returns all keys as-is; callers filter by prefix/separator.
+   - No changes to existing behavior when `label` is `None`.
+
+2. Inject dimensions from the predict route handler via `request.state`
+   - Add `request: Request` parameter to `predict()` in `app/api/routes/predict.py`.
+   - After resolving `series_id`, `version`, and `detector`, set:
+     ```python
+     request.state.metrics_label = f"{series_id}/{resolved_version}/{detector_name}"
+     ```
+   - Must be set before the `return` statement so the middleware can read it in the `finally` block.
+
+3. Read `request.state.metrics_label` in the ASGI middleware
+   - In `app/main.py`, after the `finally` block computes `duration_ms`:
+     ```python
+     label = getattr(request.state, "metrics_label", None)
+     app.state.metrics_service.record(endpoint=endpoint, duration_ms=duration_ms, error=error, label=label)
+     ```
+   - All other endpoints continue to record with `label=None` — no behavioral change.
+
+4. Add `inference_latency_by_model` field to `HealthcheckResponse`
+   - Add `ModelLatencyMetrics` Pydantic model with fields: `series_id`, `version`, `detector`, `request_count`, `avg_ms`, `p50_ms`, `p95_ms`, `p99_ms`.
+   - Add `inference_latency_by_model: list[ModelLatencyMetrics]` to `HealthcheckResponse`.
+   - In `healthcheck()`, filter snapshot keys containing `|`, parse the label parts, and build the list sorted by `series_id`, `version`, `detector`.
+   - Extend `MetricsService.snapshot()` to return `p50_latency_ms` alongside the existing `p95` and `p99`.
+   - Field is an empty list `[]` when no labeled predict requests have been recorded yet.
+
+5. Update OpenAPI spec
+   - Add `ModelLatencyMetrics` schema and `inference_latency_by_model` field to the `HealthcheckResponse` schema in `docs/context/openapi_spec.yaml`.
+
+6. Tests
+   - Unit — `tests/unit/test_metrics_service.py`:
+     - `test_record_with_label_stores_under_composite_key`: verify labeled records appear under `"endpoint|label"` key in snapshot.
+     - `test_record_without_label_unaffected`: verify unlabeled records continue to work as before.
+     - `test_snapshot_includes_p50`: verify `p50_latency_ms` is present in snapshot output.
+   - Unit — `tests/unit/test_healthcheck_route.py`:
+     - `test_healthcheck_inference_by_model_empty_before_any_predict`: `inference_latency_by_model` is `[]` with no labeled records.
+     - `test_healthcheck_inference_by_model_populated_after_labeled_record`: one labeled record produces one entry with correct fields.
+     - `test_healthcheck_existing_aggregates_unaffected_by_labeled_records`: `inference_latency_ms` aggregates do not include labeled keys.
+   - Integration — `tests/integration/test_healthcheck_endpoint.py`:
+     - `test_healthcheck_inference_by_model_after_predict`: train + predict, then GET /healthcheck — verify `inference_latency_by_model` contains one entry matching the series/version/detector.
+     - `test_healthcheck_inference_by_model_empty_with_no_predicts`: GET /healthcheck with no prior predicts — `inference_latency_by_model` is `[]`.
+
+### Acceptance Criteria
+
+- `GET /healthcheck` response includes `inference_latency_by_model` as a list; empty before any predict.
+- After `POST /predict/{series_id}`, the entry for that `series_id/version/detector` appears with non-null `avg_ms`, `p50_ms`, `p95_ms`, `p99_ms`.
+- Existing `inference_latency_ms` and `training_latency_ms` fields are unchanged.
+- `pytest -v` passes.
 
 ---
 
