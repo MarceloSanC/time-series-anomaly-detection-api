@@ -662,8 +662,10 @@ Rationale:
 
 1. Add `?detector=` param to `/plot` route
    - Add optional `detector: str = "gaussian"` query parameter to the route handler in `app/api/routes/plot.py`.
-   - Validate against `SUPPORTED_DETECTORS`; return `UNSUPPORTED_DETECTOR` (422) for unrecognized values.
+   - Keep detector validation centralized in `ModelService` (same pattern used by `/fit`, `/predict`, `/models*`) so unrecognized values return normalized `UNSUPPORTED_DETECTOR` (422).
    - Propagate detector through `model_service.get_plot_data(series_id, version, detector)` and into `_resolve_version`.
+   - When `version` is explicitly provided, version lookup must remain detector-scoped:
+     - if the version does not exist in the selected detector namespace, return `404 VERSION_NOT_FOUND_FOR_DETECTOR`.
 
 2. Separate rendering functions per detector
    - Refactor `app/api/routes/plot.py` to extract two rendering functions:
@@ -671,16 +673,18 @@ Rationale:
      - `_render_isolation_forest_plot(fig, ax, plot_data)` — isolation-forest-specific elements:
        - scatter training points colored by anomaly score intensity (blue = low score, red = high score) using `training_scores: list[float]` from metadata; fall back to uniform color when absent.
        - `score_threshold` horizontal line (the decision boundary, equivalent to upper_bound for gaussian).
-       - subtitle or title annotation with contamination rate (`{contamination:.1%} contamination`).
+       - subtitle/title annotation with contamination value:
+         - numeric contamination: format as percent (`{contamination:.1%}`)
+         - `"auto"` contamination: render as literal (`contamination=auto`)
    - Route handler dispatches to the correct function based on `detector`.
 
 3. Persist `training_scores` for isolation_forest
-   - After fitting an isolation_forest model, compute the anomaly score for each training point (`decision_function` output).
+   - After fitting an isolation_forest model, compute the anomaly score for each training point using `score_samples` (same score space used by `score_threshold`).
    - Store as `training_scores: list[float]` in `metadata.json` alongside `training_data`.
    - No change needed for gaussian (gaussian does not use scores).
 
 4. Anomaly coloring for both detectors
-   - Extend the model_service training path: after fitting either detector, run a post-fit pass over training data to compute `training_anomaly_flags: list[bool]` (which training points the trained model would flag).
+   - Extend the model_service training path: after fitting either detector (gaussian and isolation_forest), run the same post-fit pass over training data to compute `training_anomaly_flags: list[bool]` using `model.predict(...)` on each training point.
    - Persist `training_anomaly_flags` in `metadata.json` alongside `training_data`.
    - In `_render_gaussian_plot`: use `training_anomaly_flags` for blue/red point coloring when present; fall back to uniform color (backward compatible).
    - In `_render_isolation_forest_plot`: use `training_scores` for color intensity when present; overlay `training_anomaly_flags` as marker shape (circle = normal, x = flagged) when available.
@@ -691,20 +695,31 @@ Rationale:
    - Use only `numpy` (already a dependency) for the regression.
 
 6. Tests
-   - Integration test for `/plot?detector=gaussian` with `training_anomaly_flags`: verify `200` with enriched metadata.
-   - Integration test for `/plot?detector=isolation_forest` with `training_scores`: verify `200`.
-   - Integration test for `/plot` with legacy metadata (no `training_anomaly_flags`, no `training_scores`): verify backward-compatible `200`.
-   - Integration test for `/plot?detector=random_forest`: verify `422` with `UNSUPPORTED_DETECTOR`.
+   Integration (`tests/integration/test_plot_endpoint.py`):
+   - `/plot?detector=gaussian` after normal `/fit`: verify `200`, `image/png`, PNG signature (exercises blue/red coloring path).
+   - `/plot?detector=isolation_forest` after `/fit?detector=isolation_forest`: verify `200`, `image/png`, PNG signature (exercises score-colored scatter + flags overlay).
+   - `/plot` without detector param: verify gaussian default behavior unchanged (`200`, `image/png`, PNG signature).
+   - `/plot?detector=isolation_forest&version=v1` where v1 exists only in gaussian namespace: verify `404 VERSION_NOT_FOUND_FOR_DETECTOR`.
+   - `/plot?detector=isolation_forest` where series was only trained with gaussian (no IF namespace): verify `404 SERIES_NOT_FOUND`.
+   - `/plot?detector=random_forest`: verify `422 UNSUPPORTED_DETECTOR`.
+   - Backward compat — gaussian legacy metadata without `training_anomaly_flags`: manually save metadata without the field, verify `200` and PNG signature (uniform color fallback, no crash).
+   - Backward compat — isolation_forest legacy metadata without `training_scores`/`training_anomaly_flags`: manually save IF metadata without those fields, verify `200` and PNG signature (uniform color fallback, no score overlay).
+
+   Unit/service (`tests/unit/test_model_service.py`):
+   - `get_plot_data(detector="gaussian")`: verify payload contains `training_anomaly_flags` as a list of bools with length equal to `n_samples`, and `mean`/`std` are present.
+   - `get_plot_data(detector="isolation_forest")`: verify payload contains `score_threshold` (float), `training_scores` (list of floats, length equal to `n_samples`), `training_anomaly_flags` (list of bools), and `contamination`.
+   - `get_plot_data(detector="isolation_forest")` for series trained only with gaussian: verify `SeriesNotFoundError` is raised.
 
 7. Documentation
    - Update `/plot` section in `ARCHITECTURE.md` to document the detector param and per-detector rendering behavior.
+   - Add a brief `/plot?detector=` example in `README.md` endpoint examples section.
 
 ### Acceptance Criteria
 
-- `GET /plot/{series_id}` (no detector param) behaves identically to before this stage.
-- `GET /plot/{series_id}?detector=isolation_forest` returns `200` and renders score-colored points with a `score_threshold` line.
-- `GET /plot/{series_id}?detector=gaussian` renders mean, upper_bound, lower_bound lines with anomaly-colored points when `training_anomaly_flags` present.
-- Fallback to uniform color for models trained before this stage (no 500 errors).
+- `GET /plot?series_id={id}` (no detector param) behaves identically to before this stage.
+- `GET /plot?series_id={id}&detector=isolation_forest` returns `200` and renders score-colored points with a `score_threshold` line.
+- `GET /plot?series_id={id}&detector=gaussian` renders mean, upper_bound, lower_bound lines with anomaly-colored points when `training_anomaly_flags` present.
+- `GET /plot?series_id={id}&detector={d}&version={v}` resolves version strictly inside selected detector namespace; mismatches return `404 VERSION_NOT_FOUND_FOR_DETECTOR`.
 - Unsupported detector param returns `422` with `UNSUPPORTED_DETECTOR`.
 - `pytest -v` passes.
 

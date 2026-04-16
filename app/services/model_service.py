@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from datetime import UTC, datetime
 import logging
+import numpy as np
 from time import perf_counter
 from typing import Any, ContextManager, Protocol
 
@@ -72,7 +73,9 @@ class ModelService:
             duration_ms = (perf_counter() - start) * 1000
 
             model_params = self._extract_train_params(model, detector_name)
-            metadata = {
+            training_scores = self._extract_training_scores(model, detector_name, values)
+            training_anomaly_flags = self._extract_training_flags(model, data)
+            metadata: dict[str, Any] = {
                 "version": version,
                 "detector": detector_name,
                 "model_params": model_params,
@@ -87,7 +90,10 @@ class ModelService:
                     {"timestamp": point.timestamp, "value": point.value}
                     for point in data.data
                 ],
+                "training_anomaly_flags": training_anomaly_flags,
             }
+            if training_scores is not None:
+                metadata["training_scores"] = training_scores
             self.repository.save(
                 series_id=series_id, version=version, model=model, metadata=metadata, detector=detector_name
             )
@@ -264,11 +270,21 @@ class ModelService:
             payload["training_data"] = metadata.get("training_data", [])
         return ModelVersionMetadata.model_validate(payload)
 
-    def get_plot_data(self, series_id: str, version: str | None = None) -> dict[str, Any]:
+    def get_plot_data(
+        self,
+        series_id: str,
+        version: str | None = None,
+        detector: str = "gaussian",
+    ) -> dict[str, Any]:
         """Return metadata fields required to render training data visualization."""
-        resolved_version = self._resolve_version(series_id=series_id, version=version)
+        detector_name = self._normalize_detector_type(detector)
+        resolved_version = self._resolve_version(series_id=series_id, version=version, detector=detector_name)
         try:
-            metadata = self.repository.load_metadata(series_id=series_id, version=resolved_version)
+            metadata = self.repository.load_metadata(
+                series_id=series_id,
+                version=resolved_version,
+                detector=detector_name,
+            )
         except FileNotFoundError as exc:
             raise PlotDataUnavailableError(
                 f"Plot metadata not available for series '{series_id}' version '{resolved_version}'"
@@ -281,12 +297,21 @@ class ModelService:
         stored_params = metadata.get("model_params") or {}
         mean = stored_params.get("mean") if stored_params else metadata.get("mean")
         std = stored_params.get("std") if stored_params else metadata.get("std")
+        score_threshold = stored_params.get("score_threshold") if stored_params else None
+        contamination = stored_params.get("contamination") if stored_params else None
+        training_scores = metadata.get("training_scores")
+        training_anomaly_flags = metadata.get("training_anomaly_flags")
         return {
             "series_id": series_id,
             "version": resolved_version,
+            "detector": detector_name,
             "mean": mean,
             "std": std,
+            "score_threshold": score_threshold,
+            "contamination": contamination,
             "training_data": training_data,
+            "training_scores": training_scores,
+            "training_anomaly_flags": training_anomaly_flags,
         }
 
     def _next_version(self, series_id: str, detector: str = "gaussian") -> str:
@@ -330,16 +355,17 @@ class ModelService:
             for point in training_data
             if isinstance(point, dict) and "value" in point
         ]
-        # Read mean/std from model_params (new format) with fallback to top-level (legacy format).
-        stored_params = metadata.get("model_params") or {}
-        mean_raw = stored_params.get("mean") if stored_params else metadata.get("mean")
-        if mean_raw is None:
-            mean_raw = metadata.get("mean")
-        std_raw = stored_params.get("std") if stored_params else metadata.get("std")
-        if std_raw is None:
-            std_raw = metadata.get("std")
-        mean = float(mean_raw) if mean_raw is not None else None
-        std = float(std_raw) if std_raw is not None else None
+        # Compute mean/std from training data when available; fall back to stored model params
+        # for legacy metadata that predates training_data persistence.
+        if values:
+            mean = float(np.mean(values))
+            std = float(np.std(values))
+        else:
+            stored_params = metadata.get("model_params") or {}
+            mean_raw = stored_params.get("mean") or metadata.get("mean")
+            std_raw = stored_params.get("std") or metadata.get("std")
+            mean = float(mean_raw) if mean_raw is not None else None
+            std = float(std_raw) if std_raw is not None else None
 
         min_value = min(values) if values else (mean if mean is not None else 0.0)
         max_value = max(values) if values else (mean if mean is not None else 0.0)
@@ -391,6 +417,18 @@ class ModelService:
         if detector == "isolation_forest":
             return {"n_estimators": 100, "contamination": "auto", "score_threshold": model.score_threshold}
         return {}
+
+    @staticmethod
+    def _extract_training_scores(model: Any, detector: DetectorType, values: list[float]) -> list[float] | None:
+        """Compute per-point anomaly scores for isolation_forest; returns None for other detectors."""
+        if detector == "isolation_forest":
+            return [float(s) for s in model._clf.score_samples([[v] for v in values])]
+        return None
+
+    @staticmethod
+    def _extract_training_flags(model: Any, data: TimeSeries) -> list[bool]:
+        """Post-fit pass: flag which training points the trained model considers anomalous."""
+        return [bool(model.predict(point)) for point in data.data]
 
     @staticmethod
     def _extract_predict_params(model: Any, detector: DetectorType) -> dict[str, Any] | None:

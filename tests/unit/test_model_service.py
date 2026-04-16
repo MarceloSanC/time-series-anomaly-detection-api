@@ -288,9 +288,11 @@ def test_build_data_quality_with_normal_metadata_payload(tmp_path: Path) -> None
 
     quality = service._build_data_quality(metadata=metadata, n_samples=3)  # noqa: SLF001
 
+    import numpy as np
+
     assert quality.n_samples == 3
-    assert quality.mean == 2.0
-    assert quality.std == 1.0
+    assert quality.mean == pytest.approx(np.mean([1.0, 2.0, 3.0]))
+    assert quality.std == pytest.approx(np.std([1.0, 2.0, 3.0]))
     assert quality.min_value == 1.0
     assert quality.max_value == 3.0
     assert quality.time_span_seconds == 10
@@ -463,3 +465,61 @@ def test_predict_raises_version_not_found_for_detector(tmp_path: Path) -> None:
 
     with pytest.raises(VersionNotFoundForDetectorError):
         service.predict(series_id="sensor_A", data_point=DataPoint(timestamp=1, value=1.0), version="v999")
+
+
+def test_get_plot_data_gaussian_includes_anomaly_flags(tmp_path: Path) -> None:
+    """get_plot_data for gaussian must include training_anomaly_flags as a list of bools."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    data = _series([1.0, 2.0, 3.0, 4.0, 5.0])
+    service.train(series_id="sensor_A", data=data)
+
+    plot_data = service.get_plot_data(series_id="sensor_A", detector="gaussian")
+
+    assert isinstance(plot_data["mean"], float)
+    assert isinstance(plot_data["std"], float)
+    flags = plot_data["training_anomaly_flags"]
+    assert isinstance(flags, list)
+    assert len(flags) == 5
+    assert all(isinstance(f, bool) for f in flags)
+
+
+def test_get_plot_data_isolation_forest_includes_scores_flags_and_threshold(tmp_path: Path) -> None:
+    """get_plot_data for isolation_forest must include score_threshold, training_scores, training_anomaly_flags, and contamination."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    service.train(series_id="sensor_A", data=_varied_series(), detector="isolation_forest")
+
+    plot_data = service.get_plot_data(series_id="sensor_A", detector="isolation_forest")
+
+    assert isinstance(plot_data["score_threshold"], float)
+    assert plot_data["contamination"] == "auto"
+    scores = plot_data["training_scores"]
+    assert isinstance(scores, list)
+    assert len(scores) == 100
+    assert all(isinstance(s, float) for s in scores)
+    flags = plot_data["training_anomaly_flags"]
+    assert isinstance(flags, list)
+    assert len(flags) == 100
+    assert all(isinstance(f, bool) for f in flags)
+
+
+def test_get_plot_data_isolation_forest_raises_series_not_found_for_gaussian_only_series(
+    tmp_path: Path,
+) -> None:
+    """get_plot_data(detector='isolation_forest') for a gaussian-only series must raise SeriesNotFoundError."""
+    service = ModelService(
+        repository=ModelRepository(storage_path=tmp_path),
+        lock_manager=LockManager(),
+        validation_service=ValidationService(min_data_points=1),
+    )
+    service.train(series_id="sensor_A", data=_series([1.0, 2.0, 3.0]))
+
+    with pytest.raises(SeriesNotFoundError):
+        service.get_plot_data(series_id="sensor_A", detector="isolation_forest")

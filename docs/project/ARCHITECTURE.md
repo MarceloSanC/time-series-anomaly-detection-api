@@ -137,7 +137,18 @@ def write_index_atomically(index_path: Path, data: dict) -> None:
 
 **Critical Docker requirement:** In a Docker container without a display server, matplotlib will fail with a backend error unless `Agg` is set explicitly. Do not rely on `MPLBACKEND` env var — set it in code.
 
-**Scope:** Scatter of training points (timestamp vs value), horizontal line at mean, dashed lines at mean ± 3*std. No external fonts, no elaborate styling.
+**Detector param:** `GET /plot?series_id={id}&detector={gaussian|isolation_forest}` defaults to `gaussian`. Version lookup is scoped to the selected detector namespace — requesting a version that does not exist in that namespace returns `404 VERSION_NOT_FOUND_FOR_DETECTOR`.
+
+**Rendering dispatch:** the route extracts the `detector` field from the plot payload and dispatches to one of two rendering functions:
+
+- `_render_gaussian_plot` — scatter colored by `training_anomaly_flags` (blue = normal, red = flagged) when present, fallback to uniform; horizontal lines at `mean`, `mean + 3σ`, `mean − 3σ`; linear regression trend line overlay.
+- `_render_isolation_forest_plot` — scatter colored by `training_scores` intensity (`coolwarm_r` colormap, red = high anomaly score) when present, with `x` marker overlay for flagged points; title annotation with contamination and `score_threshold` value (score_threshold is in score space, not value space — rendered as text, not as a y-axis line); linear regression trend line overlay.
+
+Both functions fall back gracefully when the enriched fields (`training_anomaly_flags`, `training_scores`) are absent — backward compatible with metadata produced before Stage I.
+
+**Metadata fields written at training time (Stage I):**
+- `training_anomaly_flags: list[bool]` — persisted for both detectors; post-fit pass via `model.predict()` over training data.
+- `training_scores: list[float]` — persisted for isolation_forest only; `clf.score_samples()` in the same score space as `score_threshold`.
 
 ---
 
