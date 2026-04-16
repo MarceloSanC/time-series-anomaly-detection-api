@@ -3,7 +3,7 @@ PIP ?= $(PYTHON) -m pip
 PYTEST ?= $(PYTHON) -m pytest
 UVICORN ?= $(PYTHON) -m uvicorn
 
-.PHONY: install test coverage run lint check docker-build docker-up docker-down docker-test-build docker-test benchmark smoke
+.PHONY: install test coverage run lint check docker-build docker-up docker-rebuild docker-down docker-test-build docker-test benchmark smoke
 
 install:
 	$(PIP) install -e ".[dev]"
@@ -29,6 +29,9 @@ docker-build:
 
 docker-up:
 	docker compose up -d
+
+docker-rebuild:
+	docker compose up -d --build
 
 docker-down:
 	docker compose down -v
