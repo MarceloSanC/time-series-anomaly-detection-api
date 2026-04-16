@@ -8,6 +8,7 @@ from typing import Any
 import matplotlib
 
 matplotlib.use("Agg", force=True)
+import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 import matplotlib.dates as mdates
@@ -130,11 +131,24 @@ def _render_gaussian_plot(fig: Figure, ax: Axes, plot_data: dict[str, Any]) -> N
     upper = mean + 3 * std
     lower = mean - 3 * std
 
-    ax.scatter(dates, values, s=14, alpha=0.8, label="training points")
+    flags = plot_data.get("training_anomaly_flags")
+    has_flags = isinstance(flags, list) and len(flags) == len(values)
+    if has_flags:
+        normal_d = [d for d, f in zip(dates, flags) if not f]
+        normal_v = [v for v, f in zip(values, flags) if not f]
+        anomaly_d = [d for d, f in zip(dates, flags) if f]
+        anomaly_v = [v for v, f in zip(values, flags) if f]
+        ax.scatter(normal_d, normal_v, s=14, alpha=0.8, color="#1f77b4", label="normal")
+        if anomaly_d:
+            ax.scatter(anomaly_d, anomaly_v, s=14, alpha=0.9, color="#d62728", label="anomaly")
+    else:
+        ax.scatter(dates, values, s=14, alpha=0.8, label="training points")
+
     ax.axhline(mean, linewidth=1.8, label="mean")
     ax.axhline(upper, linestyle="--", linewidth=1.4, label="+3 sigma")
     ax.axhline(lower, linestyle="--", linewidth=1.4, label="-3 sigma")
-    ax.set_title(f"Series {plot_data['series_id']} ({plot_data['version']})")
+    _add_trend_line(ax=ax, training_data=training_data, dates=dates, values=values)
+    ax.set_title(f"Series {plot_data['series_id']} ({plot_data['version']}) — {len(values)} points")
     _apply_axis_layout(fig=fig, ax=ax, dates=dates)
 
 
@@ -149,6 +163,9 @@ def _render_isolation_forest_plot(fig: Figure, ax: Axes, plot_data: dict[str, An
         and len(training_scores) == len(values)
         and all(isinstance(score, (int, float)) for score in training_scores)
     )
+    flags = plot_data.get("training_anomaly_flags")
+    has_flags = isinstance(flags, list) and len(flags) == len(values)
+
     if has_scores:
         scatter = ax.scatter(
             dates,
@@ -160,6 +177,11 @@ def _render_isolation_forest_plot(fig: Figure, ax: Axes, plot_data: dict[str, An
             label="training points",
         )
         fig.colorbar(scatter, ax=ax, label="anomaly score")
+        if has_flags:
+            flagged_d = [d for d, f in zip(dates, flags) if f]
+            flagged_v = [v for v, f in zip(values, flags) if f]
+            if flagged_d:
+                ax.scatter(flagged_d, flagged_v, s=40, marker="x", color="black", linewidths=1.2, label="flagged", zorder=5)
     else:
         ax.scatter(dates, values, s=14, alpha=0.8, color="#1f77b4", label="training points")
 
@@ -167,12 +189,25 @@ def _render_isolation_forest_plot(fig: Figure, ax: Axes, plot_data: dict[str, An
     if isinstance(score_threshold, (int, float)):
         ax.axhline(float(score_threshold), linestyle="--", linewidth=1.4, label="score_threshold")
 
+    _add_trend_line(ax=ax, training_data=training_data, dates=dates, values=values)
     contamination = _format_contamination(plot_data.get("contamination"))
-    title = f"Series {plot_data['series_id']} ({plot_data['version']})"
+    title = f"Series {plot_data['series_id']} ({plot_data['version']}) — {len(values)} points"
     if contamination is not None:
         title = f"{title} - contamination={contamination}"
     ax.set_title(title)
     _apply_axis_layout(fig=fig, ax=ax, dates=dates)
+
+
+def _add_trend_line(
+    ax: Axes,
+    training_data: list[dict[str, Any]],
+    dates: list[datetime],
+    values: list[float],
+) -> None:
+    timestamps = [int(p["timestamp"]) for p in training_data]
+    coeffs = np.polyfit(timestamps, values, 1)
+    trend = np.polyval(coeffs, timestamps).tolist()
+    ax.plot(dates, trend, linestyle="--", linewidth=0.8, color="gray", alpha=0.6, label="trend")
 
 
 def _format_contamination(raw_contamination: Any) -> str | None:

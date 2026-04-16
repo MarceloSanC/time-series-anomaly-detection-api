@@ -72,7 +72,9 @@ class ModelService:
             duration_ms = (perf_counter() - start) * 1000
 
             model_params = self._extract_train_params(model, detector_name)
-            metadata = {
+            training_scores = self._extract_training_scores(model, detector_name, values)
+            training_anomaly_flags = self._extract_training_flags(model, data)
+            metadata: dict[str, Any] = {
                 "version": version,
                 "detector": detector_name,
                 "model_params": model_params,
@@ -87,7 +89,10 @@ class ModelService:
                     {"timestamp": point.timestamp, "value": point.value}
                     for point in data.data
                 ],
+                "training_anomaly_flags": training_anomaly_flags,
             }
+            if training_scores is not None:
+                metadata["training_scores"] = training_scores
             self.repository.save(
                 series_id=series_id, version=version, model=model, metadata=metadata, detector=detector_name
             )
@@ -294,6 +299,7 @@ class ModelService:
         score_threshold = stored_params.get("score_threshold") if stored_params else None
         contamination = stored_params.get("contamination") if stored_params else None
         training_scores = metadata.get("training_scores")
+        training_anomaly_flags = metadata.get("training_anomaly_flags")
         return {
             "series_id": series_id,
             "version": resolved_version,
@@ -304,6 +310,7 @@ class ModelService:
             "contamination": contamination,
             "training_data": training_data,
             "training_scores": training_scores,
+            "training_anomaly_flags": training_anomaly_flags,
         }
 
     def _next_version(self, series_id: str, detector: str = "gaussian") -> str:
@@ -408,6 +415,18 @@ class ModelService:
         if detector == "isolation_forest":
             return {"n_estimators": 100, "contamination": "auto", "score_threshold": model.score_threshold}
         return {}
+
+    @staticmethod
+    def _extract_training_scores(model: Any, detector: DetectorType, values: list[float]) -> list[float] | None:
+        """Compute per-point anomaly scores for isolation_forest; returns None for other detectors."""
+        if detector == "isolation_forest":
+            return [float(s) for s in model._clf.score_samples([[v] for v in values])]
+        return None
+
+    @staticmethod
+    def _extract_training_flags(model: Any, data: TimeSeries) -> list[bool]:
+        """Post-fit pass: flag which training points the trained model considers anomalous."""
+        return [bool(model.predict(point)) for point in data.data]
 
     @staticmethod
     def _extract_predict_params(model: Any, detector: DetectorType) -> dict[str, Any] | None:
