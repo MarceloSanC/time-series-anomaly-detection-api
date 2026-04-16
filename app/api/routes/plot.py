@@ -3,10 +3,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from io import BytesIO
 import logging
+from typing import Any
 
 import matplotlib
 
 matplotlib.use("Agg", force=True)
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from fastapi import APIRouter, Depends, Query
@@ -23,7 +26,7 @@ logger = logging.getLogger(__name__)
 @router.get(
     "/plot",
     summary="Render model training plot",
-    description="Returns a PNG image with training points, mean line and ±3 sigma bounds.",
+    description="Returns a detector-aware PNG image for training data visualization.",
     responses={
         404: {
             "model": ErrorResponse,
@@ -96,35 +99,15 @@ def plot_series(
     ),
     model_service: ModelService = Depends(get_model_service),
 ) -> StreamingResponse:
-    """Render training points plus mean and 3-sigma bounds as PNG."""
+    """Render detector-aware training plot as PNG."""
     logger.info("Plot request received", extra={"series_id": series_id, "version": version, "detector": detector})
     plot_data = model_service.get_plot_data(series_id=series_id, version=version, detector=detector)
 
-    training_data = plot_data["training_data"]
-    timestamps = [int(point["timestamp"]) for point in training_data]
-    dates = [datetime.fromtimestamp(timestamp, tz=UTC) for timestamp in timestamps]
-    values = [float(point["value"]) for point in training_data]
-    mean = float(plot_data["mean"])
-    std = float(plot_data["std"])
-    upper = mean + 3 * std
-    lower = mean - 3 * std
-    is_single_day = all(dt.date() == dates[0].date() for dt in dates)
-
     fig, ax = plt.subplots(figsize=(10, 4))
-    ax.scatter(dates, values, s=14, alpha=0.8, label="training points")
-    ax.axhline(mean, linewidth=1.8, label="mean")
-    ax.axhline(upper, linestyle="--", linewidth=1.4, label="+3 sigma")
-    ax.axhline(lower, linestyle="--", linewidth=1.4, label="-3 sigma")
-    ax.set_title(f"Series {series_id} ({plot_data['version']})")
-    ax.set_xlabel("timestamp")
-    ax.set_ylabel("value")
-    if is_single_day:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S", tz=UTC))
+    if plot_data["detector"] == "isolation_forest":
+        _render_isolation_forest_plot(fig=fig, ax=ax, plot_data=plot_data)
     else:
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d\n%H:%M", tz=UTC))
-    ax.legend(loc="best")
-    fig.tight_layout()
-    fig.autofmt_xdate()
+        _render_gaussian_plot(fig=fig, ax=ax, plot_data=plot_data)
 
     buffer = BytesIO()
     fig.savefig(buffer, format="png")
@@ -135,3 +118,83 @@ def plot_series(
         extra={"series_id": series_id, "version": plot_data["version"], "detector": detector},
     )
     return StreamingResponse(buffer, media_type="image/png")
+
+
+def _render_gaussian_plot(fig: Figure, ax: Axes, plot_data: dict[str, Any]) -> None:
+    training_data = plot_data["training_data"]
+    dates = [datetime.fromtimestamp(int(p["timestamp"]), tz=UTC) for p in training_data]
+    values = [float(p["value"]) for p in training_data]
+
+    mean = float(plot_data["mean"])
+    std = float(plot_data["std"])
+    upper = mean + 3 * std
+    lower = mean - 3 * std
+
+    ax.scatter(dates, values, s=14, alpha=0.8, label="training points")
+    ax.axhline(mean, linewidth=1.8, label="mean")
+    ax.axhline(upper, linestyle="--", linewidth=1.4, label="+3 sigma")
+    ax.axhline(lower, linestyle="--", linewidth=1.4, label="-3 sigma")
+    ax.set_title(f"Series {plot_data['series_id']} ({plot_data['version']})")
+    _apply_axis_layout(fig=fig, ax=ax, dates=dates)
+
+
+def _render_isolation_forest_plot(fig: Figure, ax: Axes, plot_data: dict[str, Any]) -> None:
+    training_data = plot_data["training_data"]
+    dates = [datetime.fromtimestamp(int(p["timestamp"]), tz=UTC) for p in training_data]
+    values = [float(p["value"]) for p in training_data]
+
+    training_scores = plot_data.get("training_scores")
+    has_scores = (
+        isinstance(training_scores, list)
+        and len(training_scores) == len(values)
+        and all(isinstance(score, (int, float)) for score in training_scores)
+    )
+    if has_scores:
+        scatter = ax.scatter(
+            dates,
+            values,
+            c=[float(score) for score in training_scores],
+            cmap="coolwarm_r",
+            s=16,
+            alpha=0.85,
+            label="training points",
+        )
+        fig.colorbar(scatter, ax=ax, label="anomaly score")
+    else:
+        ax.scatter(dates, values, s=14, alpha=0.8, color="#1f77b4", label="training points")
+
+    score_threshold = plot_data.get("score_threshold")
+    if isinstance(score_threshold, (int, float)):
+        ax.axhline(float(score_threshold), linestyle="--", linewidth=1.4, label="score_threshold")
+
+    contamination = _format_contamination(plot_data.get("contamination"))
+    title = f"Series {plot_data['series_id']} ({plot_data['version']})"
+    if contamination is not None:
+        title = f"{title} - contamination={contamination}"
+    ax.set_title(title)
+    _apply_axis_layout(fig=fig, ax=ax, dates=dates)
+
+
+def _format_contamination(raw_contamination: Any) -> str | None:
+    if raw_contamination is None:
+        return None
+    if isinstance(raw_contamination, str):
+        if raw_contamination == "auto":
+            return "auto"
+        return raw_contamination
+    if isinstance(raw_contamination, (int, float)):
+        return f"{float(raw_contamination):.1%}"
+    return str(raw_contamination)
+
+
+def _apply_axis_layout(fig: Figure, ax: Axes, dates: list[datetime]) -> None:
+    is_single_day = all(dt.date() == dates[0].date() for dt in dates)
+    ax.set_xlabel("timestamp")
+    ax.set_ylabel("value")
+    if is_single_day:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S", tz=UTC))
+    else:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d\n%H:%M", tz=UTC))
+    ax.legend(loc="best")
+    fig.tight_layout()
+    fig.autofmt_xdate()

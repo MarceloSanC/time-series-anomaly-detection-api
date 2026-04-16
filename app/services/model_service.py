@@ -291,13 +291,19 @@ class ModelService:
         stored_params = metadata.get("model_params") or {}
         mean = stored_params.get("mean") if stored_params else metadata.get("mean")
         std = stored_params.get("std") if stored_params else metadata.get("std")
+        score_threshold = stored_params.get("score_threshold") if stored_params else None
+        contamination = stored_params.get("contamination") if stored_params else None
+        training_scores = metadata.get("training_scores")
         return {
             "series_id": series_id,
             "version": resolved_version,
             "detector": detector_name,
             "mean": mean,
             "std": std,
+            "score_threshold": score_threshold,
+            "contamination": contamination,
             "training_data": training_data,
+            "training_scores": training_scores,
         }
 
     def _next_version(self, series_id: str, detector: str = "gaussian") -> str:
