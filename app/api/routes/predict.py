@@ -116,7 +116,10 @@ class PredictResponse(BaseModel):
                             "value": {
                                 "error": "VALIDATION_ERROR",
                                 "message": "Request payload validation failed",
-                                "detail": "[{'type': 'value_error', 'loc': ['body', 'timestamp'], 'msg': 'timestamp must be a unix timestamp string'}]",
+                                "detail": (
+                                    "[{'type': 'value_error', 'loc': ['body', 'timestamp'],"
+                                    " 'msg': 'timestamp must be a unix timestamp string'}]"
+                                ),
                                 "timestamp": "2026-04-15T17:10:00Z",
                             },
                         },
@@ -154,4 +157,8 @@ def predict_series(
         "Predict request completed",
         extra={"series_id": series_id, "version": prediction.version, "anomaly": prediction.is_anomaly},
     )
-    return PredictResponse(anomaly=prediction.is_anomaly, model_version=prediction.version, detector=prediction.detector)
+    return PredictResponse(
+        anomaly=prediction.is_anomaly,
+        model_version=prediction.version,
+        detector=prediction.detector,
+    )

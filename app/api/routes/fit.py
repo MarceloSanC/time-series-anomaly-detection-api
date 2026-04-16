@@ -118,7 +118,10 @@ class FitResponse(BaseModel):
                             "value": {
                                 "error": "VALIDATION_ERROR",
                                 "message": "Request payload validation failed",
-                                "detail": "[{'type': 'value_error', 'loc': ['body', 'timestamps'], 'msg': 'timestamps and values cannot be empty'}]",
+                                "detail": (
+                                    "[{'type': 'value_error', 'loc': ['body', 'timestamps'],"
+                                    " 'msg': 'timestamps and values cannot be empty'}]"
+                                ),
                                 "timestamp": "2026-04-15T16:45:00Z",
                             },
                         },
@@ -155,4 +158,9 @@ def fit_series(
         "Fit request completed",
         extra={"series_id": series_id, "detector": detector, "version": trained.version},
     )
-    return FitResponse(series_id=trained.series_id, detector=trained.detector, version=trained.version, points_used=trained.n_samples)
+    return FitResponse(
+        series_id=trained.series_id,
+        detector=trained.detector,
+        version=trained.version,
+        points_used=trained.n_samples,
+    )

@@ -51,7 +51,10 @@ logger = logging.getLogger(__name__)
 def list_models(
     strict: bool = Query(
         default=False,
-        description="When true, fail-fast if any series has incomplete latest metadata. When false, ignore incomplete metadata and return all available summaries.",
+        description=(
+            "When true, fail-fast if any series has incomplete latest metadata. "
+            "When false, ignore incomplete metadata and return all available summaries."
+        ),
     ),
     detector: str | None = Query(
         default=None,

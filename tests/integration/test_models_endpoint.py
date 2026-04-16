@@ -35,7 +35,8 @@ def test_models_endpoint_lists_multiple_series_summaries(client: TestClient) -> 
     assert len(payload) == 2
     series_ids = sorted(item["series_id"] for item in payload)
     assert series_ids == ["sensor_A", "sensor_B"]
-    assert all(set(item.keys()) == {"series_id", "detector", "latest_version", "n_samples", "trained_at"} for item in payload)
+    expected_keys = {"series_id", "detector", "latest_version", "n_samples", "trained_at"}
+    assert all(set(item.keys()) == expected_keys for item in payload)
     assert all(item["detector"] == "gaussian" for item in payload)
 
 
