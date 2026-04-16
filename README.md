@@ -156,13 +156,6 @@ Healthcheck:
 curl --fail-with-body -sS http://localhost:8000/healthcheck
 ```
 
-Visualization:
-
-```bash
-curl "http://localhost:8000/plot?series_id=sensor_XYZ" --output plot.png
-curl "http://localhost:8000/plot?series_id=sensor_XYZ&version=v1" --output plot_v1.png
-```
-
 Model introspection (additive extension):
 
 ```bash
@@ -189,6 +182,13 @@ curl --fail-with-body -sS "http://localhost:8000/models/sensor_XYZ/versions/v1?i
 
 These `/models*` endpoints are additive introspection extensions and do not change
 the core OpenAPI-defined contracts for `/fit`, `/predict`, and `/healthcheck`.
+
+Visualization:
+
+```bash
+curl "http://localhost:8000/plot?series_id=sensor_XYZ" --output plot.png
+curl "http://localhost:8000/plot?series_id=sensor_XYZ&version=v1" --output plot_v1.png
+```
 
 Example output:
 
@@ -218,16 +218,17 @@ Latest recorded run (`--both-detectors`):
 
 | Metric | Gaussian | Isolation Forest |
 |---|---:|---:|
-| p50 (ms) | 291.53 | 249.64 |
-| p95 (ms) | 368.95 | 322.59 |
-| p99 (ms) | 369.96 | 325.16 |
-| avg (ms) | 262.30 | 232.33 |
-| min (ms) | 35.77 | 21.87 |
-| max (ms) | 370.31 | 327.79 |
-| throughput (req/s) | 250.80 | 292.95 |
-| total duration (s) | 0.40 | 0.34 |
+| p50 (ms) | 210.95 | 3310.11 |
+| p95 (ms) | 376.48 | 4280.77 |
+| p99 (ms) | 381.35 | 4309.49 |
+| avg (ms) | 233.09 | 3085.88 |
+| min (ms) | 24.77 | 63.32 |
+| max (ms) | 381.46 | 4312.52 |
+| throughput (req/s) | 249.62 | 23.09 |
+| total duration (s) | 0.40 | 4.33 |
 
-- `isolation_forest` was faster across all percentiles in this run (+42 req/s, ~+17% throughput).
+- Gaussian p50 (~211ms) under 100 parallel requests is dominated by `joblib.load()` I/O contention — the O(1) prediction cost is negligible at this scale.
+- Isolation Forest p50 (~3310ms) compounds I/O contention with GIL pressure from scikit-learn's `score_samples()` traversing 100 decision trees per call — ~16× slower throughput than gaussian under load.
 - Results are environment-sensitive; compare trends across repeated runs rather than absolute values.
 
 ---
@@ -261,7 +262,7 @@ Latest recorded run:
 - Both detectors achieved 100% TPR on anomalies injected at mean+4.5*std.
 - Gaussian achieved 0% FPR; IsolationForest flagged 17.5% of normal points (higher FPR by design of its 10th-percentile threshold).
 - This result is expected on gaussian-distributed data — the gaussian detector is a parametric fit to the exact distribution. IsolationForest holds the advantage on non-gaussian, multimodal, or clustered-anomaly scenarios, and is the only option for detecting negative outliers.
-- Under sequential low-load conditions, the latency gap (p50: ~4ms gaussian vs ~32ms isolation_forest) reflects the algorithmic cost difference: gaussian predict is O(1) arithmetic; isolation_forest traverses 100 decision trees per call via scikit-learn `score_samples`. This cost is masked under high concurrency (see benchmark results above), where HTTP and I/O overhead dominate.
+- Under sequential low-load conditions, the latency gap (p50: ~4ms gaussian vs ~32ms isolation_forest) reflects the algorithmic cost difference: gaussian predict is O(1) arithmetic; isolation_forest traverses 100 decision trees per call via scikit-learn `score_samples`. Under high concurrency this gap widens further — GIL contention from tree traversal serializes isolation_forest predictions, driving throughput down to ~23 req/s vs ~250 req/s for gaussian (see benchmark results above).
 
 ---
 
