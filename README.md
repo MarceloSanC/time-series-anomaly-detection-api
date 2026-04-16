@@ -1,4 +1,4 @@
-# time-series-anomaly-detection-api
+# Time Series Anomaly Detection API
 
 A production-oriented REST API for univariate time-series anomaly detection, built with FastAPI.
 
@@ -9,14 +9,30 @@ The service:
 - serves real-time predictions
 - exposes health metrics and visualization endpoints
 
+## Capabilities
+
+| Area | What's built |
+|---|---|
+| **Detectors** | Gaussian (parametric, 3σ threshold) and Isolation Forest — switchable via `?detector=` on all endpoints |
+| **Versioning** | Incremental version labels (`v1`, `v2`, …) scoped per `(series_id, detector)` with full lineage tracking |
+| **Storage** | Detector-scoped artifact layout: `storage/{series_id}/{detector}/{version}/` |
+| **Validation** | Fail-fast pipeline with 7 configurable rules; industrial sensor rules (flat-line, temporal-gap) opt-in |
+| **Introspection** | `/models*` endpoints expose model inventory, data quality indicators, and version metadata |
+| **Logging** | `LOG_FORMAT=text\|json`; JSON mode emits structured lines with `request_id` and ML event fields |
+| **Observability** | In-memory latency percentiles (p50/p95/p99) per endpoint; visualization via `/plot` |
+| **Analysis scripts** | Benchmark (latency under load), detector comparison (TPR/FPR), drift analysis (static vs rolling) |
+
 ## Architecture Overview
 
-Each `series_id` keeps an independent model lineage. Retraining creates a new version without overwriting previous versions. Predictions default to latest version, but support explicit historical versions via `?version=`.
-Detector selection is optional via `?detector=` (`gaussian` default, `isolation_forest` available).
+**Layered design:** `api` → `services` → `repository` → `domain`. The API layer maps HTTP contracts to domain schemas; `ModelService` orchestrates training and inference; `ModelRepository` handles all filesystem I/O; domain models (`AnomalyDetectionModel`, `IsolationForestDetector`) are transport-agnostic.
 
-Concurrent training is parallel across different `series_id` values and serialized for the same `series_id` using per-series locking.
+**Concurrency:** Training of different `series_id` values runs in parallel. Training of the same `series_id` is serialized with a `threading.Lock` to guarantee correct version ordering. Inference is stateless and fully concurrent.
 
-For architecture decisions and trade-offs, see [Architecture](docs/project/ARCHITECTURE.md).
+**Validation pipeline:** `ValidationService` runs seven fail-fast rules before the training lock is acquired — structural checks (min points, constant series, NaN/inf, duplicate/unordered timestamps) plus optional industrial sensor rules (flat-line, temporal-gap).
+
+**Request correlation:** A UUID `request_id` is generated per request in middleware, stored in a `ContextVar`, and injected into every log record — enabling full request traceability across all log lines.
+
+For detailed decisions and trade-offs, see [Architecture](docs/project/ARCHITECTURE.md).
 
 ## Requirements
 
@@ -88,13 +104,13 @@ Script (detector default `gaussian`):
 ./scripts/examples/fit_request.sh
 ```
 
-Script (detector explicito `isolation_forest`):
+Script (explicit `isolation_forest` detector):
 
 ```bash
 DETECTOR=isolation_forest ./scripts/examples/fit_request.sh
 ```
 
-`curl` equivalente:
+Equivalent `curl`:
 
 ```bash
 curl --fail-with-body -sS -X POST "http://localhost:8000/fit/sensor_XYZ" \
@@ -124,10 +140,12 @@ JSON
 Predict:
 
 ```bash
-./scripts/examples/predict_request.sh
-VERSION_QUERY=v1 ./scripts/examples/predict_request.sh
-DETECTOR=isolation_forest ./scripts/examples/predict_request.sh
-curl --fail-with-body -sS -X POST "http://localhost:8000/predict/sensor_XYZ?version=v1" \
+curl --fail-with-body -sS -X POST "http://localhost:8000/predict/sensor_XYZ" \
+  -H "Content-Type: application/json" \
+  -d '{"timestamp":"1700000100","value":99.0}'
+
+# explicit version and detector:
+curl --fail-with-body -sS -X POST "http://localhost:8000/predict/sensor_XYZ?version=v1&detector=isolation_forest" \
   -H "Content-Type: application/json" \
   -d '{"timestamp":"1700000100","value":99.0}'
 ```
@@ -222,13 +240,13 @@ Trains both detectors via the API on the same gaussian-distributed dataset (150 
 .venv/bin/python scripts/compare_detectors.py
 ```
 
-Output saved to `scripts/detector_comparison.json`. After the run, the gaussian training data can be visualized:
+Output saved to `scripts/detector_comparison.json`. Models are persisted in storage after the run. The plot below shows the **training data only** (150 normal points) with the fitted gaussian bounds — anomalies are injected exclusively into the held-out test split and are not visible here:
 
 ```bash
 curl "http://localhost:8000/plot?series_id=compare_gaussian" --output compare_plot.png
 ```
 
-![Gaussian training data with mean and ±3σ bounds](docs/assets/compare_plot.png)
+![Gaussian training data (150 normal points) with fitted mean and ±3σ bounds — test anomalies not shown](docs/assets/compare_plot.png)
 
 Latest recorded run:
 
@@ -243,7 +261,7 @@ Latest recorded run:
 - Both detectors achieved 100% TPR on anomalies injected at mean+4.5*std.
 - Gaussian achieved 0% FPR; IsolationForest flagged 17.5% of normal points (higher FPR by design of its 10th-percentile threshold).
 - This result is expected on gaussian-distributed data — the gaussian detector is a parametric fit to the exact distribution. IsolationForest holds the advantage on non-gaussian, multimodal, or clustered-anomaly scenarios, and is the only option for detecting negative outliers.
-- Latency includes HTTP round-trip and is comparable between detectors, not a measure of pure algorithmic cost.
+- Under sequential low-load conditions, the latency gap (p50: ~4ms gaussian vs ~32ms isolation_forest) reflects the algorithmic cost difference: gaussian predict is O(1) arithmetic; isolation_forest traverses 100 decision trees per call via scikit-learn `score_samples`. This cost is masked under high concurrency (see benchmark results above), where HTTP and I/O overhead dominate.
 
 ---
 
@@ -275,26 +293,42 @@ Latest recorded run:
 
 ## Known Limitations
 
-- The baseline algorithm detects only positive anomalies (`value > mean + 3*std`).
-- Negative outliers are not flagged by design. Example: if `mean=100` and `std=5`, a value of `50`
-  (i.e. `mean - 10*std`) still returns `anomaly=false` in `/predict`.
-- Metrics are in-memory and reset on service restart.
-- Persistence is local filesystem (`storage/`), suitable for single-instance deployments.
-- `/plot` requires metadata that includes `training_data`; legacy models without it return `422 PLOT_DATA_UNAVAILABLE`.
+All limitations below are deliberate design decisions or known trade-offs with documented evolution paths.
+
+**Algorithm — Gaussian detector**
+
+| Limitation | Notes | Reference |
+|---|---|---|
+| One-sided detection only | Values below `mean − 3σ` are never flagged; use `isolation_forest` for symmetric detection | [Modeling Notes §1](docs/project/MODEL_DESIGN_NOTES.md) |
+| Sensitive to training outliers | `mean`/`std` are non-robust; a single spike in training data widens thresholds and reduces sensitivity | [Modeling Notes §1](docs/project/MODEL_DESIGN_NOTES.md) |
+| Stationarity assumption | Thresholds are static; performance degrades under concept drift without retraining | [Modeling Notes §1](docs/project/MODEL_DESIGN_NOTES.md) |
+| No contextual detection | One global threshold — same value can be normal in one regime and anomalous in another | [Modeling Notes §1](docs/project/MODEL_DESIGN_NOTES.md) |
+
+**Algorithm — Isolation Forest detector**
+
+| Limitation | Notes | Reference |
+|---|---|---|
+| High FPR on gaussian-distributed data | 10th-percentile threshold flags ~10% of normal points by design; use gaussian for parametric distributions | [V2 Roadmap Stage D](docs/project/V2_ROADMAP.md) |
+| Masking effect on low-variance data | Insufficient training variance causes all points to score similarly, degrading detection | [V2 Roadmap Stage D](docs/project/V2_ROADMAP.md) |
+
+**System**
+
+| Limitation | Notes | Reference |
+|---|---|---|
+| Single-instance persistence | Filesystem layout not shared across instances; production path: S3/GCS via same `ModelRepository` interface | [Architecture §1, §13](docs/project/ARCHITECTURE.md) |
+| Metrics reset on restart | In-memory only; production path: Prometheus + Grafana | [Architecture §4](docs/project/ARCHITECTURE.md) |
+| Inference latency under load | `joblib.load()` on critical path; production path: pre-load latest model into `app.state` on startup (expected p99 < 5ms) | [Architecture §13](docs/project/ARCHITECTURE.md) |
+| Training blocks series lock | Training of the same `series_id` is serialized; acceptable at O(n) model size | [Architecture §2](docs/project/ARCHITECTURE.md) |
+
+
 
 ## Troubleshooting
 
-**`/plot` returns `422 PLOT_DATA_UNAVAILABLE`**
+**API error reference**
 
-The plot endpoint requires `training_data` to be persisted in `metadata.json`. Models trained before this field was added do not have it. Retrain the series to generate a compatible artifact:
+All errors follow the same normalized shape: `{"error": "CODE", "message": "...", "detail": null, "timestamp": "..."}`.
 
-```bash
-curl -X POST "http://localhost:8000/fit/sensor_XYZ" -H "Content-Type: application/json" -d '{"timestamps":[...],"values":[...]}'
-```
-
-**`POST /fit` returns a `400` validation error**
-
-Common validation error codes and their causes:
+`400 Bad Request` — training data rejected by validation pipeline:
 
 | Error code | Cause |
 |---|---|
@@ -304,7 +338,33 @@ Common validation error codes and their causes:
 | `UNORDERED_TIMESTAMPS` | Timestamps are not strictly increasing |
 | `INVALID_VALUES` | Series contains `NaN` or infinite values |
 | `FLAT_LINE_DETECTED` | Trailing window is constant (only when `FLAT_LINE_ENABLED=true`) |
-| `TEMPORAL_GAP_DETECTED` | Max interval exceeds `MAX_TEMPORAL_GAP_FACTOR × median interval` (only when `TEMPORAL_GAP_ENABLED=true`) |
+| `TEMPORAL_GAP_DETECTED` | Max interval exceeds `MAX_TEMPORAL_GAP_FACTOR × median(intervals)` (only when `TEMPORAL_GAP_ENABLED=true`) |
+| `INVALID_SERIES_ID` | `series_id` is empty or contains unsafe characters for filesystem storage |
+
+`404 Not Found`:
+
+| Error code | Cause |
+|---|---|
+| `SERIES_NOT_FOUND` | `series_id` does not exist in storage |
+| `VERSION_NOT_FOUND_FOR_DETECTOR` | Requested `version` exists for a different detector or not at all |
+
+`422 Unprocessable Entity`:
+
+| Error code | Cause |
+|---|---|
+| `UNSUPPORTED_DETECTOR` | `?detector=` value is not `gaussian` or `isolation_forest` |
+| `PLOT_DATA_UNAVAILABLE` | Model was trained before `training_data` was persisted — retrain to fix |
+| `INCOMPLETE_MODEL_METADATA` | Metadata missing for a series version when `?strict=true` on `/models` |
+| `VALIDATION_ERROR` | Request payload failed schema validation (missing fields, wrong types) |
+
+**Docker env_file override does not work with shell-prefixed variables**
+
+Running `FLAT_LINE_ENABLED=true docker compose up` does NOT enable the flag inside the container — `env_file` values in `docker-compose.yml` are passed directly to the container and are not overridden by shell-prefixed variables. Edit `.env` directly and restart with `--force-recreate`:
+
+```bash
+# Edit .env, then:
+docker compose up --build --force-recreate
+```
 
 **Quick Docker validation**
 
@@ -323,20 +383,19 @@ docker compose logs -f api
 make docker-down
 ```
 
-## Training Validation Extensions
-
-- Flat-line and temporal-gap rules are opt-in via config and disabled by default.
-- Thresholds are configurable via `FLAT_LINE_WINDOW` and `MAX_TEMPORAL_GAP_FACTOR`.
-- Enable flags are configured with `FLAT_LINE_ENABLED` and `TEMPORAL_GAP_ENABLED`.
-
 ## Architecture Decisions (Brief)
 
-- Persistence uses detector-scoped local filesystem artifacts (`joblib` + `metadata.json`) under `storage/{series_id}/{detector}/{version}`.
-- Concurrency uses per-series locks (`threading.Lock`) to serialize retraining of the same `series_id`.
-- Validation is fail-fast and runs before training lock acquisition.
-- API contract follows `docs/context/openapi_spec.yaml`; internal schemas are mapped in the API layer.
-- Metrics are in-memory with bounded latency windows for percentile calculations.
-- Live API docs expose detector query params and normalized errors at `/docs` and `/redoc`.
+Key decisions and their rationale are documented in [Architecture](docs/project/ARCHITECTURE.md). Summary:
+
+| Decision | Choice | Reference |
+|---|---|---|
+| Model persistence | `joblib` files under `storage/{series_id}/{detector}/{version}/`; metadata in separate `metadata.json` for inspection without deserialization | [§1](docs/project/ARCHITECTURE.md) |
+| Concurrency | `threading.Lock` per `series_id` — serializes retraining of same series, parallel across different series; `asyncio.Lock` rejected (numpy/joblib not async-safe) | [§2](docs/project/ARCHITECTURE.md) |
+| Versioning | Incremental string labels (`v1`, `v2`, …) per `(series_id, detector)`; `index.json` written atomically via rename to prevent corruption | [§3](docs/project/ARCHITECTURE.md) |
+| Validation | Fail-fast pipeline runs before lock acquisition; thresholds injected via constructor for test isolation | [§5](docs/project/ARCHITECTURE.md) |
+| API error contract | Normalized `{"error", "message", "detail", "timestamp"}` shape for all errors; status codes follow OpenAPI spec | [§6](docs/project/ARCHITECTURE.md) |
+| Validation extensions | Flat-line and temporal-gap rules are opt-in via flags — always-on would reject valid non-industrial data; new rules require only a typed exception + one error map entry | [§11](docs/project/ARCHITECTURE.md) |
+| Multi-detector contract | `?detector=` is additive on all endpoints; omitting it resolves to `gaussian` namespace — backward-compatible | [§14](docs/project/ARCHITECTURE.md) |
 
 ## Configuration
 
@@ -347,10 +406,16 @@ Use `.env` for real runtime values and keep it untracked.
 | Variable | Default | Description |
 |---|---|---|
 | `APP_PORT` | `8000` | API server port |
+| `LOG_LEVEL` | `INFO` | Python log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `LOG_FORMAT` | `text` | Log output format — `text` (human-readable) or `json` (structured lines) |
 | `STORAGE_PATH` | `./storage` | Model artifact directory |
 | `MIN_DATA_POINTS` | `30` | Minimum points required for training |
 | `STD_THRESHOLD` | `1e-10` | Minimum std threshold for constant-series rejection |
 | `MAX_LATENCY_SAMPLES` | `1000` | Sliding window size for latency percentiles |
+| `FLAT_LINE_ENABLED` | `false` | Enable flat-line detection rule (opt-in; targets frozen/disconnected sensors) |
+| `FLAT_LINE_WINDOW` | `10` | Number of trailing points checked for flat-line condition |
+| `TEMPORAL_GAP_ENABLED` | `false` | Enable temporal-gap detection rule (opt-in; targets sampling instability) |
+| `MAX_TEMPORAL_GAP_FACTOR` | `2.0` | Maximum interval factor — rejects if `max(intervals) > factor × median(intervals)` |
 
 ## Structured Logging
 
@@ -402,19 +467,13 @@ Recommended fields for filtering in external log platforms:
 | `detector` | Segment metrics by detector family |
 | `version` | Identify which model version served a prediction |
 
-Request-scoped summary logging checklist:
-
-- `/fit`: log `event=model_trained` with `series_id`, `detector`, `version`, `n_samples`, `duration_ms`, and gaussian params (`mean`, `std`) when applicable.
-- `/predict`: log `event=prediction_served` with `series_id`, `detector`, `version`, `value`, `is_anomaly`, and detector-specific decision fields (gaussian: `mean`, `upper_bound`; isolation_forest: `score_threshold`).
-- `/plot`: include `series_id`, resolved `version`, and outcome (`success` or `PLOT_DATA_UNAVAILABLE`) with request correlation.
-- `/models*`: include query context (`strict`, `detector`, `include_data`) and returned series/version scope for traceability.
-
 ## Documentation
 
 - [Docs Index](docs/README.md)
-- [Roadmap](docs/project/ROADMAP.md)
+- [V1 Roadmap](docs/project/V1_ROADMAP.md)
+- [V2 Roadmap](docs/project/V2_ROADMAP.md)
 - [Architecture](docs/project/ARCHITECTURE.md)
 - [Modeling Notes](docs/project/MODEL_DESIGN_NOTES.md)
 - [AI Usage](docs/ai/LLM_USAGE.md)
 - [Git Protocol](docs/process/GIT_PROTOCOL.md)
-- API live docs: `/docs` (Swagger UI) e `/redoc` (ReDoc)
+- API live docs: `/docs` (Swagger UI) and `/redoc` (ReDoc)
